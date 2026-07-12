@@ -1,16 +1,16 @@
 name: Son24 içerik güncelleme
 
-# Private repo → GitHub Actions free tier is 2000 min/month. Running every 2
-# hours (12 runs/day) keeps us comfortably under it (~1800 min/month at ~5
-# min/run). Each run only summarises NEW events, so Gemini quota is spent on
-# real new stories. Importance ranking decides which reach the 20 cards.
+# Public repo → GitHub Actions minutes are unlimited, so we run every 30 min
+# for fast breaking-news coverage. Each run only summarises NEW events, so
+# Gemini quota is spent on real new stories. Importance ranking decides which
+# reach the 20 cards.
 #
-# Want fresher updates? Make the repo Public (unlimited free Actions) and
-# change the cron to '*/30 * * * *' for every-30-minutes.
+# NOTE (pre-publish): 30 min is still a dev cadence. Before launch, move to
+# near-realtime ingestion so son dakika lands instantly (see project memory).
 on:
   schedule:
-    - cron: '0 */2 * * *'   # every 2 hours, on the hour
-  workflow_dispatch: {}     # allow manual "Run workflow" from the Actions tab
+    - cron: '*/30 * * * *'   # every 30 minutes
+  workflow_dispatch: {}      # allow manual "Run workflow" from the Actions tab
 
 # Don't stack runs: if one is still going, skip the next tick.
 concurrency:
