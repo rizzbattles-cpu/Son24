@@ -26,9 +26,16 @@ import { fetchHtml } from '../scrape/lib/shared.mjs';
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const GEMINI_KEY = process.env.GEMINI_API_KEY;
-const MODEL = process.env.GEMINI_MODEL ?? 'gemini-2.5-flash-lite';
+// Free-tier quotas are PER MODEL, so we rotate through several: when one
+// model's daily quota runs out (429), the next takes over — multiplying the
+// free daily capacity at zero cost. Order: cheapest/fastest first.
+const MODELS = (process.env.GEMINI_MODELS ??
+  'gemini-2.5-flash-lite,gemini-2.0-flash-lite,gemini-2.0-flash,gemini-2.5-flash')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
 const THROTTLE_MS = Number(process.env.GEMINI_THROTTLE_MS ?? 5000); // ~12 RPM cap
-const MAX_RETRIES = 4;
+const MAX_RETRIES = 3; // per model; on persistent 429 we fall through to the next model
 
 // Background-link tuning: lower than the merge threshold (0.9) because we want
 // "same storyline, earlier chapter", not "same story duplicated".
@@ -125,35 +132,72 @@ function extractJson(text) {
   }
 }
 
+// Models whose daily quota ran out during this run — skipped until next run.
+const exhaustedModels = new Set();
+
 async function callGemini(prompt) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_KEY}`;
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.3, maxOutputTokens: 1800 },
-      }),
-    });
-    if (res.status === 429 || res.status === 503) {
-      const wait = 8000 * (attempt + 1);
-      console.log(`  ⏳ ${res.status}, backing off ${wait / 1000}s`);
-      await new Promise((r) => setTimeout(r, wait));
-      continue;
+  for (const model of MODELS) {
+    if (exhaustedModels.has(model)) continue;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_KEY}`;
+
+    // 2.5-series are "thinking" models: without a budget cap their reasoning
+    // eats maxOutputTokens and the JSON gets truncated mid-string. Disable
+    // thinking for them (2.0 models reject the field, so add conditionally).
+    const generationConfig = { temperature: 0.3, maxOutputTokens: 3000 };
+    if (model.startsWith('gemini-2.5')) {
+      generationConfig.thinkingConfig = { thinkingBudget: 0 };
     }
-    if (!res.ok) {
-      const t = await res.text();
-      throw new Error(`Gemini ${res.status}: ${t.slice(0, 160)}`);
+
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig,
+        }),
+      });
+
+      if (res.status === 429) {
+        // Rate/quota hit. Brief backoff in case it's just RPM; if it keeps
+        // 429ing, assume the daily quota is gone and rotate to the next model.
+        if (attempt < MAX_RETRIES - 1) {
+          const wait = 6000 * (attempt + 1);
+          console.log(`  ⏳ ${model} 429, backing off ${wait / 1000}s`);
+          await new Promise((r) => setTimeout(r, wait));
+          continue;
+        }
+        console.log(`  ↪ ${model} kotası doldu — sıradaki modele geçiliyor`);
+        exhaustedModels.add(model);
+        break; // next model
+      }
+      if (res.status === 503) {
+        const wait = 8000 * (attempt + 1);
+        console.log(`  ⏳ ${model} 503, backing off ${wait / 1000}s`);
+        await new Promise((r) => setTimeout(r, wait));
+        continue;
+      }
+      if (res.status === 404) {
+        // Model id not available for this key/region — skip it permanently.
+        console.warn(`  ↪ ${model} bulunamadı (404) — listeden çıkarılıyor`);
+        exhaustedModels.add(model);
+        break;
+      }
+      if (!res.ok) {
+        const t = await res.text();
+        throw new Error(`Gemini(${model}) ${res.status}: ${t.slice(0, 160)}`);
+      }
+
+      const j = await res.json();
+      const text = j?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!text) throw new Error(`Gemini(${model}) empty response`);
+      const parsed = extractJson(text);
+      if (!parsed) throw new Error(`could not parse JSON (${model}): ${text.slice(0, 160)}`);
+      parsed.__model = model;
+      return parsed;
     }
-    const j = await res.json();
-    const text = j?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) throw new Error('Gemini empty response');
-    const parsed = extractJson(text);
-    if (!parsed) throw new Error(`could not parse JSON: ${text.slice(0, 160)}`);
-    return parsed;
   }
-  throw new Error(`Gemini retries exhausted`);
+  throw new Error(`tüm Gemini modellerinin kotası dolu (${MODELS.join(', ')})`);
 }
 
 async function extractArticleText(url) {
@@ -380,7 +424,7 @@ async function processOne(evt, pool) {
   }
   if (updErr) throw updErr;
 
-  return { ok: true, title: out.title, quotes: Object.keys(sourceQuotes).length, related: related.length };
+  return { ok: true, title: out.title, quotes: Object.keys(sourceQuotes).length, related: related.length, model: out.__model };
 }
 
 async function run() {
@@ -396,7 +440,7 @@ async function run() {
       const r = await processOne(evt, pool);
       if (r.ok) {
         ok++;
-        console.log(`  ✓ ${evt.id} → "${r.title}" (alıntı=${r.quotes}, arka plan=${r.related})`);
+        console.log(`  ✓ ${evt.id} → "${r.title}" (alıntı=${r.quotes}, arka plan=${r.related}, model=${r.model})`);
       } else {
         console.log(`  ⏭  ${evt.id} skipped: ${r.reason}`);
       }
