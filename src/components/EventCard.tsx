@@ -18,10 +18,12 @@ if (Platform.OS === 'web' && typeof document !== 'undefined') {
     const el = document.createElement('style');
     el.id = STYLE_ID;
     el.textContent =
-      '[data-cardscroll]{scrollbar-width:thin;scrollbar-color:#96523d rgba(0,0,0,0.07);overscroll-behavior:contain;}' +
-      '[data-cardscroll]::-webkit-scrollbar{width:4px}' +
-      '[data-cardscroll]::-webkit-scrollbar-thumb{background:#96523d;border-radius:2px}' +
-      '[data-cardscroll]::-webkit-scrollbar-track{background:rgba(0,0,0,0.07);border-radius:2px}';
+      '[data-cardscroll]{scrollbar-width:thin;scrollbar-color:#96523d transparent;overscroll-behavior:contain;}' +
+      '[data-cardscroll]::-webkit-scrollbar{width:6px}' +
+      // Rounded pill thumb (bordo), inset from top/bottom so it reads as a
+      // short capsule — never a full-height rectangle.
+      '[data-cardscroll]::-webkit-scrollbar-thumb{background:#96523d;border-radius:9px;border:1px solid rgba(0,0,0,0.15)}' +
+      '[data-cardscroll]::-webkit-scrollbar-track{background:transparent;margin:12px 0}';
     document.head.appendChild(el);
   }
 }
@@ -145,8 +147,6 @@ export function EventCard({
               <View style={styles.quoteOuter}>
                 <View style={styles.quoteShadow} />
                 <View style={styles.quoteBox}>
-                  <Text style={styles.quoteMarkTop}>“</Text>
-                  <Text style={styles.quoteMarkBottom}>”</Text>
                   <ScrollView
                     // overflowY 'scroll' (web): the scrollbar rail is ALWAYS
                     // visible, so readers know the box scrolls before trying.
@@ -156,7 +156,10 @@ export function EventCard({
                     persistentScrollbar
                     nestedScrollEnabled
                     {...({ dataSet: { cardscroll: '1' } } as object)}>
-                    <Text style={[styles.summary, summarySizing(event.summary)]}>{event.summary}</Text>
+                    <Text style={[styles.summary, summarySizing(event.summary)]}>
+                      <Text style={styles.summaryLead}>{event.summary.split(' ')[0]} </Text>
+                      {event.summary.split(' ').slice(1).join(' ')}
+                    </Text>
                   </ScrollView>
                 </View>
               </View>
@@ -289,27 +292,8 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
     overflow: 'hidden',
   },
-  quoteMarkTop: {
-    position: 'absolute',
-    top: 2,
-    left: 8,
-    color: '#221c12',
-    fontFamily: CardFonts.displayBold,
-    fontSize: 26,
-    lineHeight: 30,
-    zIndex: 2,
-  },
-  quoteMarkBottom: {
-    position: 'absolute',
-    bottom: 0,
-    right: 8,
-    color: '#221c12',
-    fontFamily: CardFonts.displayBold,
-    fontSize: 26,
-    lineHeight: 30,
-    zIndex: 2,
-  },
-  quoteContent: { paddingTop: 16, paddingBottom: 18, paddingRight: 10, paddingLeft: 10 },
+  summaryLead: { fontFamily: CardFonts.sansBold }, // first word bold
+  quoteContent: { paddingTop: 10, paddingBottom: 12, paddingRight: 10, paddingLeft: 6 },
   photo: { width: '100%', backgroundColor: CardPalette.bgAlt },
   dashRule: {
     marginTop: 14,

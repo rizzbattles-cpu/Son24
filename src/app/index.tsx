@@ -13,6 +13,13 @@ import { router } from 'expo-router';
 import { Image } from 'expo-image';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withTiming,
+  Easing,
+} from 'react-native-reanimated';
 
 import { Gold } from '@/constants/theme';
 import { AgendaEvent, Category } from '@/types/event';
@@ -189,6 +196,28 @@ export default function HomeScreen() {
     setCardOpen(true);
   }, []);
 
+  // Logo / "Tümü" tap: refresh data and reset to the top of the home feed.
+  const goHome = useCallback(() => {
+    setCardOpen(false);
+    setCategory('Tümü');
+    setVisibleCount(12);
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+    load(true);
+  }, [load]);
+
+  // "Breathing" attention pulse for the BAŞLAMAK İÇİN DOKUN teaser.
+  const pulse = useSharedValue(0);
+  useEffect(() => {
+    pulse.value = withRepeat(withTiming(1, { duration: 1500, easing: Easing.inOut(Easing.ease) }), -1, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const teaserScaleStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: 1 + pulse.value * 0.02 }],
+  }));
+  const teaserGlowStyle = useAnimatedStyle(() => ({
+    opacity: 0.3 + pulse.value * 0.5,
+  }));
+
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       {/* Header — symmetric: SAYI (left) · SON 24 (center) · date+day (right) */}
@@ -196,9 +225,9 @@ export default function HomeScreen() {
         <View style={styles.headerSide}>
           <Text style={styles.headerSayi}>V1.0</Text>
         </View>
-        <View style={styles.brandWrap}>
+        <Pressable style={styles.brandWrap} onPress={goHome} hitSlop={8}>
           <Image source={require('../../assets/images/son24-logo.png')} style={styles.brandLogo} contentFit="contain" />
-        </View>
+        </Pressable>
         <View style={[styles.headerSide, styles.headerSideRight]}>
           <Text style={styles.headerDateText}>{headerDate}</Text>
           <Text style={styles.headerDayText}>{headerDay}</Text>
@@ -221,7 +250,21 @@ export default function HomeScreen() {
           {CATEGORIES.map((c, i) => {
             const on = c.key === category;
             return (
-              <Pressable key={c.label + i} onPress={() => { setCategory(c.key); setVisibleCount(10); }} style={styles.catItem}>
+              <Pressable
+                key={c.label + i}
+                onPress={() => {
+                  if (c.key === 'Tümü') {
+                    goHome();
+                    return;
+                  }
+                  // Category tap: open that category's card deck first; when
+                  // the cards run out the reader closes into the list view.
+                  setCategory(c.key);
+                  setVisibleCount(12);
+                  const catCards = allEvents.filter((e) => e.category === c.key).slice(0, 20);
+                  if (catCards.length > 0) openCards(catCards, 0);
+                }}
+                style={styles.catItem}>
                 <View style={[styles.catCircle, on && styles.catCircleOn]}>
                   <Ionicons name={c.icon} size={22} color={on ? Gold.bg : Gold.gold} />
                 </View>
@@ -254,28 +297,39 @@ export default function HomeScreen() {
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={Gold.gold} colors={[Gold.gold]} />
         }>
-        {/* Blurred card deck teaser — tap to enter the swipe reader */}
+        {/* Blurred card deck teaser — breathing glow, tap to enter the reader */}
         {cards.length > 0 && (
-          <Pressable style={styles.teaser} onPress={() => openCards(cards, 0)}>
-            <View style={styles.teaserStack}>
-              <View style={[styles.teaserCard, styles.teaserCardBack]} />
-              <View style={[styles.teaserCard, styles.teaserCardMid]} />
-              <View style={[styles.teaserCard, styles.teaserCardFront]}>
-                {featured?.imageUrl && (
-                  <Image source={{ uri: featured.imageUrl }} style={styles.teaserImg} contentFit="cover" contentPosition="top" />
-                )}
-                <Text style={styles.teaserCardTitle} numberOfLines={2}>{featured?.title}</Text>
+          <Animated.View style={teaserScaleStyle}>
+            <Pressable style={styles.teaser} onPress={() => openCards(cards, 0)}>
+              <View style={styles.teaserStack}>
+                <View style={[styles.teaserCard, styles.teaserCardBack]} />
+                <View style={[styles.teaserCard, styles.teaserCardMid]} />
+                <View style={[styles.teaserCard, styles.teaserCardFront]}>
+                  {featured?.imageUrl && (
+                    <Image source={{ uri: featured.imageUrl }} style={styles.teaserImg} contentFit="cover" contentPosition="top" />
+                  )}
+                  <Text style={styles.teaserCardTitle} numberOfLines={2}>{featured?.title}</Text>
+                </View>
               </View>
-            </View>
-            <BlurView intensity={28} tint="dark" style={styles.teaserBlur} pointerEvents="none" />
-            <View style={styles.teaserOverlay} pointerEvents="none">
-              <View style={styles.teaserPlay}>
-                <Ionicons name="play" size={22} color={Gold.bg} />
+              <BlurView intensity={28} tint="dark" style={styles.teaserBlur} pointerEvents="none" />
+              {/* Soft white light around the edges — pulses like a breath */}
+              <Animated.View
+                pointerEvents="none"
+                style={[
+                  styles.teaserGlow,
+                  { boxShadow: '0 0 26px 5px rgba(255,255,255,0.38), inset 0 0 18px rgba(255,255,255,0.22)' } as object,
+                  teaserGlowStyle,
+                ]}
+              />
+              <View style={styles.teaserOverlay} pointerEvents="none">
+                <View style={styles.teaserPlay}>
+                  <Ionicons name="play" size={22} color={Gold.bg} />
+                </View>
+                <Text style={styles.teaserText}>BAŞLAMAK İÇİN DOKUN</Text>
+                <Text style={styles.teaserSub}>{cards.length} önemli olay · kaydırarak oku</Text>
               </View>
-              <Text style={styles.teaserText}>BAŞLAMAK İÇİN DOKUN</Text>
-              <Text style={styles.teaserSub}>{cards.length} önemli olay · kaydırarak oku</Text>
-            </View>
-          </Pressable>
+            </Pressable>
+          </Animated.View>
         )}
 
         {/* Featured */}
@@ -474,11 +528,21 @@ const styles = StyleSheet.create({
   teaser: {
     marginHorizontal: 16,
     marginTop: 16,
-    height: 148,
+    height: 182,
     borderRadius: 16,
     overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  teaserGlow: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.8)',
   },
   teaserStack: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
   teaserCard: {
@@ -486,10 +550,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: '#e8d5a2',
   },
-  teaserCardBack: { width: '78%', height: 110, top: 10, opacity: 0.5, transform: [{ scale: 0.92 }] },
-  teaserCardMid: { width: '84%', height: 120, top: 14, opacity: 0.75, transform: [{ scale: 0.96 }] },
-  teaserCardFront: { width: '90%', height: 130, top: 8, overflow: 'hidden' },
-  teaserImg: { width: '100%', height: 78 },
+  teaserCardBack: { width: '78%', height: 138, top: 12, opacity: 0.5, transform: [{ scale: 0.92 }] },
+  teaserCardMid: { width: '84%', height: 150, top: 16, opacity: 0.75, transform: [{ scale: 0.96 }] },
+  teaserCardFront: { width: '90%', height: 162, top: 10, overflow: 'hidden' },
+  teaserImg: { width: '100%', height: 100 },
   teaserCardTitle: {
     color: '#1a1509',
     fontFamily: 'Rubik_800ExtraBold',

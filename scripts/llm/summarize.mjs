@@ -39,7 +39,7 @@ const MAX_RETRIES = 3; // per model; on persistent 429 we fall through to the ne
 
 // Background-link tuning: lower than the merge threshold (0.9) because we want
 // "same storyline, earlier chapter", not "same story duplicated".
-const RELATED_THRESHOLD = Number(process.env.RELATED_THRESHOLD ?? 0.55);
+const RELATED_THRESHOLD = Number(process.env.RELATED_THRESHOLD ?? 0.62);
 const RELATED_WINDOW_DAYS = Number(process.env.RELATED_WINDOW_DAYS ?? 45);
 const RELATED_MAX = 3;
 
@@ -60,26 +60,30 @@ function fmtTrDate(d) {
   return `${dt.getDate()} ${TR_M_ABBR[dt.getMonth()]} ${dt.getFullYear()}`;
 }
 
-const PROMPT_TEMPLATE = `Sen, Türkiye gündemini takip edemeyen sıradan bir vatandaşa günü anlatan tarafsız bir editörsün. Amacın: kişi bu kartı okuyunca hem ne olduğunu hem de bunun KENDİ HAYATINA ne anlama geldiğini anlasın.
+const PROMPT_TEMPLATE = `Sen tarafsız bir HABER EDİTÖRÜSÜN. Görevin: kaynak metinleri okuyup analiz etmek, kilit olguları çıkarmak ve YORUMSUZ bir haber özeti yazmak. Sen yorumlamazsın, değerlendirmezsin — sadece ne olduğunu, kimin ne dediğini, sürecin şu an nerede olduğunu aktarırsın.
 
 BUGÜNÜN TARİHİ: {today}
 
 KURALLAR:
 - Kendi cümlelerinle yaz. Kaynağın cümlelerini KOPYALAMA (tek istisna: source_quotes alanı, orada birebir alıntı istenir).
-- Sadece Türkçe. Tarafsız kal, taraf tutma, abartma.
-- Sade, günlük dil kullan. Teknik terimleri açıkla.
-- YASAK: "X açıklama yaptı", "bir açıklamada bulundu", "değerlendirmede bulundu", "konuştu" gibi İÇİ BOŞ cümleler. Ne dediğini/ne olduğunu SOMUT anlat. Okuyucu kaynağa gitmeden olayı anlamalı: kim, ne dedi, neden, karşı taraf ne söyledi.
-- Makale metnini oku; olayın ÖZÜNÜ ver. Sadece başlıktan özet çıkarma.
-- "summary" KISA ve HAP BİLGİ olsun: en fazla 3 kısa cümle, toplam 45 kelimeyi geçmesin. 1) ne oldu, 2) neden önemli / sıradan insanı nasıl etkiler. Uzun paragraf YAZMA. Net, yalın, dolgu cümle yok.
-- Birden fazla kaynak varsa (İKTİDAR, MUHALEFET, DEVLET KURUMU, AJANS): her tarafın söylediğini kısaca özetlemeye çalış. Kimin ne dediğini "iktidar tarafı ... derken muhalefet ..." gibi yalın olarak belirt. Tek taraflı yazma.
+- Sadece Türkçe. Sade, günlük dil.
+- YORUM YASAK: "önemli", "kritik", "dikkat çekici", "tartışma yarattı", "bu gelişme ... anlamına geliyor", "... olarak değerlendiriliyor" gibi değerlendirme ve çıkarım cümleleri KULLANMA. Sadece olgu.
+- YASAK: "X açıklama yaptı", "bir açıklamada bulundu", "konuştu" gibi İÇİ BOŞ cümleler. Ne dediğini/ne olduğunu SOMUT anlat.
+
+"summary" — HABER ÖZETİ (en kritik alan):
+- 3-5 cümle, toplam 50-80 kelime. Kaynak metinleri OKU, ANALİZ ET, KİLİT NOKTALARI çıkar.
+- TÜM kaynaklardaki bilgiyi TOPARLA ve GÜNCEL DURUMU yaz: ne oldu → kim ne yaptı/dedi → süreç şu an nerede.
+- VURUCU SOMUT DETAYLAR özetin merkezinde olmalı: para tutarları ("60 milyon dolar"), sayılar ("700 işçi", "25 gözaltı"), tarihler, yerler, isimler. Metindeki en çarpıcı rakam/iddia MUTLAKA özette geçmeli.
+- Birden fazla kaynak varsa (İKTİDAR, MUHALEFET, DEVLET KURUMU, AJANS) her tarafın söylediğini yalın aktar: "iktidar tarafı ... derken muhalefet ..." Tek taraflı yazma, yorum katma.
 
 HİKAYE (story) — çok önemli:
-- Bu olayın ARKA PLANINI ve nasıl bu noktaya geldiğini anlat. Aşağıdaki "GEÇMİŞ İLGİLİ GELİŞMELER" bölümü varsa oradaki GERÇEK tarihli olayları kullan; yoksa makaledeki bilgilerle ve konu hakkındaki genel bilginle kur.
+- AYNI KONUNUN önceki halkalarını kronolojik sırala: bu açıklama/olay daha önce KİM tarafından, NEREDE, NASIL gündeme geldi → bugüne nasıl geldi.
+- Aşağıdaki "GEÇMİŞ İLGİLİ GELİŞMELER" listesinden SADECE gerçekten aynı konuya ait olanları kullan; ALAKASIZ olanları tamamen YOK SAY (emin değilsen kullanma). Konuyla ilgisi olmayan bir gelişmeyi hikayeye SOKMA.
 - EN AZ 3, mümkünse 4 adım: en eski gelişmeden bugüne doğru kronolojik.
 - HER ADIMDA "relative" alanına TARİH yaz: kesin biliyorsan kısa tarih ("18 Haz", "3 Tem 2026"), kesin bilmiyorsan dürüst yaklaşık ifade ("Mart başı", "Geçen hafta"). ASLA tarih uydurma.
 - HER ADIMDA "detail" GERÇEK ve SOMUT bir gelişme anlatmalı: kim ne yaptı ("Meclis komisyonda kabul etti", "Bakanlık soruşturma başlattı"). Şablon/dolgu cümle ("süreç devam etti", "gündeme geldi", "ilk kayıt") YASAK.
 - Son adım BUGÜNKÜ olay olmalı.
-- how_we_got_here: 2-3 dolu cümle; olayın kökenini ve bugüne nasıl geldiğini açıkla.
+- how_we_got_here: 2-3 dolu cümle; olayın kökenini ve bugüne nasıl geldiğini YORUMSUZ açıkla.
 
 ALINTILAR (source_quotes) — yeni:
 - HER kaynak için, o kaynağın metninden BİREBİR (kelimesi kelimesine) kısa ve çarpıcı BİR cümle seç: kaynağın kendi ağzından en önemli iddiası/sözü. En fazla 140 karakter.
@@ -263,6 +267,7 @@ function cosine(a, b) {
 // background candidates even if the embedding distance alone wouldn't qualify
 // (different wording, different category — Siyaset vs Dış Politika).
 const BG_ENTITIES = [
+  // countries / blocs / foreign leaders
   'abd', 'amerika', 'washington', 'rusya', 'moskova', 'ukrayna', 'israil', 'iran',
   'yunanistan', 'atina', 'almanya', 'fransa', 'ingiltere', 'çin', 'azerbaycan',
   'ermenistan', 'suriye', 'irak', 'kıbrıs', 'kktc', 'ege', 'akdeniz', 'nato',
@@ -270,7 +275,14 @@ const BG_ENTITIES = [
   'mısır', 'libya', 'gürcistan', 'bulgaristan', 'pakistan', 'hindistan',
   'japonya', 'güney kore', 'kuzey kore', 'filistin', 'gazze', 'lübnan', 'yemen',
   'somali', 'balkan', 'trump', 'putin', 'zelenski', 'netanyahu', 'macron',
+  // defence industry
   'savunma sanayi', 'baykar', 'aselsan', 'roketsan', 'f-16', 'f-35', 'kaan',
+  // domestic storylines — an Öcalan statement should pair with earlier Öcalan
+  // coverage, not with an unrelated ambassador/pension story
+  'öcalan', 'pkk', 'imralı', 'kandil', 'terör', 'dem parti', 'hdp',
+  'asgari ücret', 'emekli maaş', 'mülteci', 'suriyeli', 'göçmen', 'sığınmacı',
+  'deprem', 'kayyum', 'anayasa', 'yargıtay', 'anayasa mahkemesi', 'yks', 'lgs',
+  'enflasyon', 'faiz', 'doğalgaz', 'elektrik zam', 'akaryakıt',
 ];
 function extractEntities(text) {
   const t = ` ${String(text).toLocaleLowerCase('tr-TR')} `;
@@ -340,7 +352,7 @@ function findRelated(pool, evt, evtText = '') {
     const shared = [...(cand.entities ?? [])].filter((x) => evtEntities.has(x)).length;
 
     const sameCatPass = cand.category === evt.category && sim >= RELATED_THRESHOLD;
-    const entityPass = shared >= 1 && sim >= 0.38;
+    const entityPass = shared >= 1 && sim >= 0.42;
     if (!sameCatPass && !entityPass) continue;
 
     scored.push({ cand, score: sim + Math.min(shared, 2) * 0.12, shared });

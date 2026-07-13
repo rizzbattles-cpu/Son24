@@ -120,6 +120,11 @@ function scoreEvent(e: EventRow, srcs: EventSourceJoined[]): number {
   let content = 1;
   if (HIGH_IMPACT_RX.test(text)) content *= 1.6;
   if (CEREMONIAL_RX.test(text)) content *= 0.3;
+  // Congratulation messages are filler unless they mark a genuinely big win
+  // (championship, record, medal). Stacks with the ceremonial penalty.
+  if (/tebrik|kutlad|kutlam/i.test(text) && !/şampiyon|rekor|madalya|tarihi başarı|zafer kazandı/i.test(text)) {
+    content *= 0.5;
+  }
   const foreignAboutTr =
     srcs.some((s) => s.raw_items.sources.tier === 'international') &&
     /türkiye|turkey|ankara/.test(text);
