@@ -520,24 +520,25 @@ const BRAND_ICONS: (keyof typeof Ionicons.glyphMap)[] = ['pricetags', 'gift', 's
 function BrandNavItem({ onPress }: { onPress?: () => void }) {
   const spin = useSharedValue(0);
   useEffect(() => {
-    // 1080° per cycle = 6 half-turns = each of the 3 logos shown twice; the
-    // wrap 1080→0 is seamless (both are "logo 0, facing front").
-    spin.value = withRepeat(withTiming(1080, { duration: 5400, easing: Easing.linear }), -1, false);
+    // Continuous 360°/0.8s spin, never pauses. 1080° per timing cycle so the
+    // wrap 1080→0 lands on the same logo facing the same way — seamless.
+    spin.value = withRepeat(withTiming(1080, { duration: 2400, easing: Easing.linear }), -1, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const face0 = useAnimatedStyle(() => ({
-    opacity: Math.floor(spin.value / 180) % 3 === 0 ? 1 : 0,
-    transform: [{ perspective: 300 }, { rotateY: `${spin.value % 360}deg` }],
-  }));
-  const face1 = useAnimatedStyle(() => ({
-    opacity: Math.floor(spin.value / 180) % 3 === 1 ? 1 : 0,
-    transform: [{ perspective: 300 }, { rotateY: `${spin.value % 360}deg` }],
-  }));
-  const face2 = useAnimatedStyle(() => ({
-    opacity: Math.floor(spin.value / 180) % 3 === 2 ? 1 : 0,
-    transform: [{ perspective: 300 }, { rotateY: `${spin.value % 360}deg` }],
-  }));
-  const faces = [face0, face1, face2];
+  // Logo swaps happen at the EDGE-ON angles (90°/270°, width ≈ 0) so the
+  // change is invisible — no static pop. Opacity eases down toward the edge
+  // for a fast motion-blur feel.
+  const mkFace = (i: number) =>
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    useAnimatedStyle(() => {
+      const idx = Math.floor(((spin.value + 90) % 1080) / 180) % 3;
+      const facing = Math.abs(Math.cos(((spin.value % 360) * Math.PI) / 180));
+      return {
+        opacity: idx === i ? 0.45 + 0.55 * facing : 0,
+        transform: [{ perspective: 300 }, { rotateY: `${spin.value % 360}deg` }],
+      };
+    });
+  const faces = [mkFace(0), mkFace(1), mkFace(2)];
   return (
     <Pressable style={styles.navItem} hitSlop={6} onPress={onPress}>
       <View style={styles.brandSpinBox}>
