@@ -210,7 +210,7 @@ export default function HomeScreen() {
   // "Breathing" attention pulse for the BAŞLAMAK İÇİN DOKUN teaser.
   const pulse = useSharedValue(0);
   useEffect(() => {
-    pulse.value = withRepeat(withTiming(1, { duration: 900, easing: Easing.inOut(Easing.ease) }), -1, true);
+    pulse.value = withRepeat(withTiming(1, { duration: 650, easing: Easing.inOut(Easing.ease) }), -1, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const teaserScaleStyle = useAnimatedStyle(() => ({
@@ -320,10 +320,12 @@ export default function HomeScreen() {
                 <View style={[styles.teaserCard, styles.teaserCardBack]} />
                 <View style={[styles.teaserCard, styles.teaserCardMid]} />
                 <View style={[styles.teaserCard, styles.teaserCardFront]}>
-                  {featured?.imageUrl && (
-                    <Image source={{ uri: featured.imageUrl }} style={styles.teaserImg} contentFit="cover" contentPosition="top" />
-                  )}
-                  <Text style={styles.teaserCardTitle} numberOfLines={2}>{featured?.title}</Text>
+                  <Image
+                    source={require('../../assets/images/teaser-gazete.png')}
+                    style={styles.teaserImgFull}
+                    contentFit="cover"
+                    contentPosition="top"
+                  />
                 </View>
               </View>
               <BlurView intensity={28} tint="dark" style={styles.teaserBlur} pointerEvents="none" />
@@ -638,7 +640,8 @@ const styles = StyleSheet.create({
   teaser: {
     marginHorizontal: 16,
     marginTop: 16,
-    height: 182,
+    height: 236, // stretched downward — the 1929 front page gets room to read
+
     borderRadius: 16,
     overflow: 'hidden',
     justifyContent: 'center',
@@ -660,10 +663,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: '#e8d5a2',
   },
-  teaserCardBack: { width: '78%', height: 138, top: 12, opacity: 0.5, transform: [{ scale: 0.92 }] },
-  teaserCardMid: { width: '84%', height: 150, top: 16, opacity: 0.75, transform: [{ scale: 0.96 }] },
-  teaserCardFront: { width: '90%', height: 162, top: 10, overflow: 'hidden' },
-  teaserImg: { width: '100%', height: 100 },
+  teaserCardBack: { width: '78%', height: 190, top: 14, opacity: 0.5, transform: [{ scale: 0.92 }] },
+  teaserCardMid: { width: '84%', height: 204, top: 18, opacity: 0.75, transform: [{ scale: 0.96 }] },
+  teaserCardFront: { width: '90%', height: 216, top: 10, overflow: 'hidden' },
+  teaserImgFull: { width: '100%', height: '100%' },
   teaserCardTitle: {
     color: '#1a1509',
     fontFamily: 'Rubik_800ExtraBold',
