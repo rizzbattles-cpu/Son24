@@ -7,6 +7,7 @@ import {
   Pressable,
   ActivityIndicator,
   RefreshControl,
+  TextInput,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -23,7 +24,7 @@ import Animated, {
 
 import { Gold } from '@/constants/theme';
 import { AgendaEvent, Category } from '@/types/event';
-import { loadTop24 } from '@/services/db';
+import { loadTop24, isBreakingEvent } from '@/services/db';
 import { CardFeed } from '@/components/CardFeed';
 
 const MONTHS = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
@@ -38,18 +39,16 @@ function fmtTime(iso: string) {
   return `${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-const CATEGORIES: { key: Category | 'Tümü'; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+type CatKey = Category | 'Tümü' | 'Son Dakika';
+
+const CATEGORIES: { key: CatKey; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
   { key: 'Tümü', label: 'Tümü', icon: 'grid-outline' },
+  { key: 'Son Dakika', label: 'Son Dakika', icon: 'flash-outline' },
   { key: 'Siyaset', label: 'Siyaset', icon: 'people-outline' },
   { key: 'Ekonomi', label: 'Ekonomi', icon: 'trending-up-outline' },
   { key: 'Dış Politika', label: 'Dış Politika', icon: 'globe-outline' },
   { key: 'Güvenlik', label: 'Güvenlik', icon: 'shield-outline' },
   { key: 'Afet', label: 'Afet', icon: 'warning-outline' },
-  { key: 'Teknoloji', label: 'Teknoloji', icon: 'hardware-chip-outline' },
-  { key: 'Sağlık', label: 'Sağlık', icon: 'medkit-outline' },
-  { key: 'Çevre', label: 'Çevre', icon: 'leaf-outline' },
-  { key: 'Eğitim', label: 'Eğitim', icon: 'school-outline' },
-  { key: 'Spor', label: 'Spor', icon: 'football-outline' },
   { key: 'Resmî Gazete', label: 'Resmî Gazete', icon: 'document-text-outline' },
 ];
 
@@ -72,7 +71,9 @@ export default function HomeScreen() {
   const [liveEvents, setLiveEvents] = useState<AgendaEvent[] | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [refreshing, setRefreshing] = useState(false);
-  const [category, setCategory] = useState<Category | 'Tümü'>('Tümü');
+  const [category, setCategory] = useState<CatKey>('Tümü');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQ, setSearchQ] = useState('');
   const [cardOpen, setCardOpen] = useState(false);
   const [cardStart, setCardStart] = useState(0);
   const [cardEvents, setCardEvents] = useState<AgendaEvent[]>([]);
@@ -118,6 +119,7 @@ export default function HomeScreen() {
   // Category filter only — the list spans all days, grouped by date below.
   const feed = useMemo(() => {
     if (category === 'Tümü') return allEvents;
+    if (category === 'Son Dakika') return allEvents.filter(isBreakingEvent);
     return allEvents.filter((e) => e.category === category);
   }, [allEvents, category]);
 
@@ -208,7 +210,7 @@ export default function HomeScreen() {
   // "Breathing" attention pulse for the BAŞLAMAK İÇİN DOKUN teaser.
   const pulse = useSharedValue(0);
   useEffect(() => {
-    pulse.value = withRepeat(withTiming(1, { duration: 1500, easing: Easing.inOut(Easing.ease) }), -1, true);
+    pulse.value = withRepeat(withTiming(1, { duration: 900, easing: Easing.inOut(Easing.ease) }), -1, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const teaserScaleStyle = useAnimatedStyle(() => ({
@@ -217,6 +219,15 @@ export default function HomeScreen() {
   const teaserGlowStyle = useAnimatedStyle(() => ({
     opacity: 0.3 + pulse.value * 0.5,
   }));
+
+  // Search: live matches across the whole archive (title + summary).
+  const searchResults = useMemo(() => {
+    const q = searchQ.trim().toLocaleLowerCase('tr-TR');
+    if (q.length < 2) return [];
+    return allEvents
+      .filter((e) => `${e.title} ${e.summary}`.toLocaleLowerCase('tr-TR').includes(q))
+      .slice(0, 30);
+  }, [allEvents, searchQ]);
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -261,7 +272,11 @@ export default function HomeScreen() {
                   // the cards run out the reader closes into the list view.
                   setCategory(c.key);
                   setVisibleCount(12);
-                  const catCards = allEvents.filter((e) => e.category === c.key).slice(0, 20);
+                  const catCards = (
+                    c.key === 'Son Dakika'
+                      ? allEvents.filter(isBreakingEvent)
+                      : allEvents.filter((e) => e.category === c.key)
+                  ).slice(0, 20);
                   if (catCards.length > 0) openCards(catCards, 0);
                 }}
                 style={styles.catItem}>
@@ -426,16 +441,62 @@ export default function HomeScreen() {
         </View>
       )}
 
+      {/* Search overlay — light blur over the app, search bar on top, live list */}
+      {searchOpen && (
+        <View style={styles.readerOverlay}>
+          <BlurView intensity={26} tint="dark" style={styles.fillAbs} />
+          <View style={[styles.fillAbs, { backgroundColor: 'rgba(5,5,4,0.45)' }]} />
+          <View style={{ flex: 1, paddingTop: insets.top + 10, paddingHorizontal: 16 }}>
+            <View style={styles.searchBarRow}>
+              <Ionicons name="search" size={18} color={Gold.gold} />
+              <TextInput
+                value={searchQ}
+                onChangeText={setSearchQ}
+                placeholder="Haberlerde ara..."
+                placeholderTextColor={Gold.textDim}
+                style={styles.searchInput}
+                autoFocus
+              />
+              <Pressable onPress={() => { setSearchOpen(false); setSearchQ(''); }} hitSlop={10}>
+                <Text style={styles.searchClose}>×</Text>
+              </Pressable>
+            </View>
+            <ScrollView style={{ flex: 1, marginTop: 12 }} keyboardShouldPersistTaps="handled">
+              {searchResults.map((e) => {
+                const idx = feed.findIndex((x) => x.id === e.id);
+                return (
+                  <Pressable
+                    key={e.id}
+                    style={styles.searchRow}
+                    onPress={() => {
+                      setSearchOpen(false);
+                      setSearchQ('');
+                      openCards(idx >= 0 ? feed : [e], Math.max(0, idx));
+                    }}>
+                    <Text style={styles.rowCat}>{e.category.toUpperCase()}</Text>
+                    <Text style={styles.rowTitle} numberOfLines={2}>{e.title}</Text>
+                    <Text style={styles.rowMetaText}>{fmtTime(e.updatedAt)}</Text>
+                  </Pressable>
+                );
+              })}
+              {searchQ.trim().length >= 2 && searchResults.length === 0 && (
+                <Text style={styles.empty}>Sonuç bulunamadı</Text>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      )}
+
       {/* Bottom nav */}
       <View style={[styles.nav, { paddingBottom: insets.bottom || 8 }]}>
-        <NavItem icon="home" label="Ana Sayfa" active onPress={() => setCardOpen(false)} />
-        <NavItem icon="git-branch-outline" label="Zaman Çizelgesi" />
+        <NavItem icon="home" label="Ana Sayfa" active onPress={() => { setCardOpen(false); setSearchOpen(false); }} />
+        <NavItem icon="search-outline" label="Ara" onPress={() => { setCardOpen(false); setSearchOpen(true); }} />
         <Pressable style={styles.navCenter} onPress={() => cards.length > 0 && openCards(cards, 0)}>
           <View style={styles.navCenterCircle}>
             <Text style={styles.navCenterText}>24</Text>
           </View>
         </Pressable>
-        <NavItem icon="albums-outline" label="Kaynaklar" />
+        <BrandNavItem />
         <NavItem icon="person-outline" label="Profil" onPress={() => { setCardOpen(false); router.push('/profil'); }} />
       </View>
     </View>
@@ -447,6 +508,46 @@ function NavItem({ icon, label, active, onPress }: { icon: keyof typeof Ionicons
     <Pressable style={styles.navItem} hitSlop={6} onPress={onPress}>
       <Ionicons name={icon} size={20} color={active ? Gold.gold : Gold.textDim} />
       <Text style={[styles.navLabel, active && styles.navLabelOn]} numberOfLines={1}>{label}</Text>
+    </Pressable>
+  );
+}
+
+// "Marka Fırsatları" — barber-pole style attention button: brand logos spin
+// like a 360° hologram (coin-flip on the Y axis, cycling through logos).
+// Same footprint and alignment as the other nav items.
+const BRAND_ICONS: (keyof typeof Ionicons.glyphMap)[] = ['pricetags', 'gift', 'sparkles'];
+
+function BrandNavItem({ onPress }: { onPress?: () => void }) {
+  const spin = useSharedValue(0);
+  useEffect(() => {
+    // 1080° per cycle = 6 half-turns = each of the 3 logos shown twice; the
+    // wrap 1080→0 is seamless (both are "logo 0, facing front").
+    spin.value = withRepeat(withTiming(1080, { duration: 5400, easing: Easing.linear }), -1, false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const face0 = useAnimatedStyle(() => ({
+    opacity: Math.floor(spin.value / 180) % 3 === 0 ? 1 : 0,
+    transform: [{ perspective: 300 }, { rotateY: `${spin.value % 360}deg` }],
+  }));
+  const face1 = useAnimatedStyle(() => ({
+    opacity: Math.floor(spin.value / 180) % 3 === 1 ? 1 : 0,
+    transform: [{ perspective: 300 }, { rotateY: `${spin.value % 360}deg` }],
+  }));
+  const face2 = useAnimatedStyle(() => ({
+    opacity: Math.floor(spin.value / 180) % 3 === 2 ? 1 : 0,
+    transform: [{ perspective: 300 }, { rotateY: `${spin.value % 360}deg` }],
+  }));
+  const faces = [face0, face1, face2];
+  return (
+    <Pressable style={styles.navItem} hitSlop={6} onPress={onPress}>
+      <View style={styles.brandSpinBox}>
+        {BRAND_ICONS.map((ic, i) => (
+          <Animated.View key={ic} style={[styles.brandFace, faces[i]]}>
+            <Ionicons name={ic} size={20} color={Gold.gold} />
+          </Animated.View>
+        ))}
+      </View>
+      <Text style={styles.navLabel} numberOfLines={1}>Marka Fırsatları</Text>
     </Pressable>
   );
 }
@@ -465,13 +566,20 @@ const styles = StyleSheet.create({
   headerSayi: { color: Gold.textMuted, fontFamily: 'Rubik_700Bold', fontSize: 12, letterSpacing: 1 },
   brandWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   brandLogo: { width: 190, height: 110 },
-  headerDateText: { color: Gold.gold, fontFamily: 'Rubik_700Bold', fontSize: 13, letterSpacing: 0.5 },
-  headerDayText: { color: Gold.textMuted, fontFamily: 'Rubik_500Medium', fontSize: 9, letterSpacing: 1.5, marginTop: 2 },
+  headerDateText: { color: Gold.gold, fontFamily: 'Rubik_700Bold', fontSize: 11, letterSpacing: 0.4 },
+  headerDayText: { color: Gold.textMuted, fontFamily: 'Rubik_500Medium', fontSize: 8, letterSpacing: 1.2, marginTop: 2 },
 
   fixedMenu: { backgroundColor: Gold.bg, marginTop: -16 },
   menuRule: { height: 1, backgroundColor: Gold.line, marginTop: 4 },
   dateRow: { paddingHorizontal: 16, gap: 10, paddingVertical: 4 },
-  dateChip: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 18, backgroundColor: Gold.surface },
+  dateChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 18,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: Gold.gold, // outline only — no fill
+  },
   dateChipOn: { backgroundColor: Gold.gold },
   dateChipText: { color: Gold.textMuted, fontFamily: 'Rubik_700Bold', fontSize: 12, letterSpacing: 1 },
   dateChipTextOn: { color: Gold.bg },
@@ -634,6 +742,34 @@ const styles = StyleSheet.create({
   retryText: { color: Gold.gold, fontFamily: 'Rubik_700Bold', fontSize: 12, letterSpacing: 1 },
 
   readerOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 20 },
+  fillAbs: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  searchBarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: Gold.surface,
+    borderWidth: 1,
+    borderColor: Gold.line,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    height: 46,
+  },
+  searchInput: {
+    flex: 1,
+    color: Gold.text,
+    fontFamily: 'Rubik_500Medium',
+    fontSize: 14,
+    paddingVertical: 0,
+  },
+  searchClose: { color: Gold.text, fontSize: 26, lineHeight: 28, marginTop: -2 },
+  searchRow: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderColor: Gold.line,
+    gap: 3,
+  },
+  brandSpinBox: { width: 22, height: 22, alignItems: 'center', justifyContent: 'center' },
+  brandFace: { position: 'absolute' },
   nav: {
     flexDirection: 'row',
     alignItems: 'center',

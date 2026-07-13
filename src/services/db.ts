@@ -97,6 +97,16 @@ const HIGH_IMPACT_RX =
   /savaş|çatışma|saldırı|operasyon|harek[âa]t|tezkere|füze|siha|iha|f-16|f-35|kaan|savunma sanayi|aselsan|baykar|roketsan|nato|zirve|ambargo|yaptırım|anlaşma|mutabakat|müzakere|kriz|gerilim|sınır|rusya|ukrayna|israil|iran|abd|amerika|yunanistan|suriye|irak|azerbaycan|ermenistan|kıbrıs|ege|akdeniz|avrupa birliği|birleşmiş milletler|enflasyon|faiz|asgari ücret|zam|devalüasyon|deprem|patlama|şehit/i;
 
 /**
+ * "Son Dakika" selector: hard-hitting news from the last 12 hours. The tab
+ * stays permanently up-to-date because it's derived, not stored.
+ */
+export function isBreakingEvent(e: { title: string; summary: string; updatedAt: string }): boolean {
+  const ageH = (Date.now() - new Date(e.updatedAt).getTime()) / 3600000;
+  if (ageH > 12) return false;
+  return HIGH_IMPACT_RX.test(`${e.title} ${e.summary}`.toLocaleLowerCase('tr-TR'));
+}
+
+/**
  * Importance ≈ how much this deserves one of the 20 slots.
  *   category × top-tier × recency × multi-source × opposition-clash × content
  * "Content" pushes hard news (war/defence/diplomacy/economy) up and pushes
