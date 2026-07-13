@@ -137,18 +137,29 @@ export function EventCard({
                 cachePolicy="memory-disk"
               />
             )}
-            {/* Summary in a scrollable box — thin bar shows it scrolls; the
-                card itself still swipes from anywhere outside this box. */}
+            {/* Summary in a contrasting quote box (amber offset shadow, dark
+                frame, quote marks) with its own always-visible scrollbar. Long
+                texts scroll INSIDE the box; the card still swipes from
+                anywhere outside it. */}
             <View style={[styles.pad, styles.boxWrap]}>
-              <View style={styles.dashRule} />
-              <ScrollView
-                style={styles.textBox}
-                contentContainerStyle={styles.textBoxContent}
-                showsVerticalScrollIndicator
-                nestedScrollEnabled
-                {...({ dataSet: { cardscroll: '1' } } as object)}>
-                <Text style={[styles.summary, summarySizing(event.summary)]}>{event.summary}</Text>
-              </ScrollView>
+              <View style={styles.quoteOuter}>
+                <View style={styles.quoteShadow} />
+                <View style={styles.quoteBox}>
+                  <Text style={styles.quoteMarkTop}>“</Text>
+                  <Text style={styles.quoteMarkBottom}>”</Text>
+                  <ScrollView
+                    // overflowY 'scroll' (web): the scrollbar rail is ALWAYS
+                    // visible, so readers know the box scrolls before trying.
+                    style={[styles.textBox, { overflowY: 'scroll' } as object]}
+                    contentContainerStyle={styles.quoteContent}
+                    showsVerticalScrollIndicator
+                    persistentScrollbar
+                    nestedScrollEnabled
+                    {...({ dataSet: { cardscroll: '1' } } as object)}>
+                    <Text style={[styles.summary, summarySizing(event.summary)]}>{event.summary}</Text>
+                  </ScrollView>
+                </View>
+              </View>
             </View>
           </View>
         ) : (
@@ -255,6 +266,50 @@ const styles = StyleSheet.create({
   boxWrap: { flex: 1 },
   textBox: { flex: 1 },
   textBoxContent: { paddingBottom: 8, paddingRight: 8 },
+  // Quote box for the summary — light panel + amber offset shadow + dark frame.
+  quoteOuter: { flex: 1, marginTop: 10, marginBottom: 12, marginRight: 4 },
+  quoteShadow: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    right: -4,
+    bottom: -5,
+    backgroundColor: '#dfa118',
+    borderRadius: 16,
+  },
+  quoteBox: {
+    flex: 1,
+    backgroundColor: '#f4efe0',
+    borderWidth: 2,
+    borderColor: '#221c12',
+    borderRadius: 14,
+    paddingLeft: 14,
+    paddingRight: 10,
+    paddingTop: 8,
+    paddingBottom: 8,
+    overflow: 'hidden',
+  },
+  quoteMarkTop: {
+    position: 'absolute',
+    top: 2,
+    left: 8,
+    color: '#221c12',
+    fontFamily: CardFonts.displayBold,
+    fontSize: 26,
+    lineHeight: 30,
+    zIndex: 2,
+  },
+  quoteMarkBottom: {
+    position: 'absolute',
+    bottom: 0,
+    right: 8,
+    color: '#221c12',
+    fontFamily: CardFonts.displayBold,
+    fontSize: 26,
+    lineHeight: 30,
+    zIndex: 2,
+  },
+  quoteContent: { paddingTop: 16, paddingBottom: 18, paddingRight: 10, paddingLeft: 10 },
   photo: { width: '100%', backgroundColor: CardPalette.bgAlt },
   dashRule: {
     marginTop: 14,
