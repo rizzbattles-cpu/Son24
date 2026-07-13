@@ -520,9 +520,10 @@ const BRAND_ICONS: (keyof typeof Ionicons.glyphMap)[] = ['pricetags', 'gift', 's
 function BrandNavItem({ onPress }: { onPress?: () => void }) {
   const spin = useSharedValue(0);
   useEffect(() => {
-    // Continuous 360°/0.8s spin, never pauses. 1080° per timing cycle so the
-    // wrap 1080→0 lands on the same logo facing the same way — seamless.
-    spin.value = withRepeat(withTiming(1080, { duration: 2400, easing: Easing.linear }), -1, false);
+    // Continuous spin at 1.5× the original pace (360°/1.2s), never pauses.
+    // 1080° per timing cycle so the wrap 1080→0 lands on the same logo facing
+    // the same way — seamless.
+    spin.value = withRepeat(withTiming(1080, { duration: 3600, easing: Easing.linear }), -1, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   // Logo swaps happen at the EDGE-ON angles (90°/270°, width ≈ 0) so the
