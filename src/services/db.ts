@@ -86,11 +86,22 @@ interface Scored {
   dominantSource: string;
 }
 
+// Ceremonial / low-substance leader content (anma, taziye, kutlama…) must not
+// occupy the top cards unless nothing else is happening.
+const CEREMONIAL_RX =
+  /anma|andı|anıyoruz|taziye|cenaze|tören|kutlad|kutlam|tebrik|çelenk|yıl ?dönümü|100\. yıl|rahmetle|vefatının|ziyaret etti|kabul etti|ağırladı|bir araya geldi/i;
+
+// Hard-hitting national/international substance: war updates, defence industry,
+// diplomacy, sanctions, economy shocks, disasters — these lead the deck.
+const HIGH_IMPACT_RX =
+  /savaş|çatışma|saldırı|operasyon|harek[âa]t|tezkere|füze|siha|iha|f-16|f-35|kaan|savunma sanayi|aselsan|baykar|roketsan|nato|zirve|ambargo|yaptırım|anlaşma|mutabakat|müzakere|kriz|gerilim|sınır|rusya|ukrayna|israil|iran|abd|amerika|yunanistan|suriye|irak|azerbaycan|ermenistan|kıbrıs|ege|akdeniz|avrupa birliği|birleşmiş milletler|enflasyon|faiz|asgari ücret|zam|devalüasyon|deprem|patlama|şehit/i;
+
 /**
  * Importance ≈ how much this deserves one of the 20 slots.
- *   category × top-tier × recency × multi-source × opposition-clash
- * "Opposition clash" (iktidar AND muhalefet both weighing in) is the strongest
- * signal a story is actually gündem — it gets a hard multiplier.
+ *   category × top-tier × recency × multi-source × opposition-clash × content
+ * "Content" pushes hard news (war/defence/diplomacy/economy) up and pushes
+ * ceremonial leader statements (anma/taziye/kutlama) far down; a foreign
+ * outlet talking about Türkiye gets an extra lift.
  */
 function scoreEvent(e: EventRow, srcs: EventSourceJoined[]): number {
   const distinctSources = new Set(srcs.map((s) => s.raw_items.sources.id));
@@ -105,7 +116,39 @@ function scoreEvent(e: EventRow, srcs: EventSourceJoined[]): number {
   const multi = 1 + 0.6 * Math.log(1 + distinctSources.size);
   const clash = leans.has('iktidar') && leans.has('muhalefet') ? 1.8 : 1;
 
-  return catW * topTier * recency * multi * clash;
+  const text = `${e.title} ${e.summary}`.toLocaleLowerCase('tr-TR');
+  let content = 1;
+  if (HIGH_IMPACT_RX.test(text)) content *= 1.6;
+  if (CEREMONIAL_RX.test(text)) content *= 0.3;
+  const foreignAboutTr =
+    srcs.some((s) => s.raw_items.sources.tier === 'international') &&
+    /türkiye|turkey|ankara/.test(text);
+  if (foreignAboutTr) content *= 1.5;
+
+  return catW * topTier * recency * multi * clash * content;
+}
+
+/**
+ * No 3 consecutive deck cards from the same outlet (max 2 in a row) — the
+ * reader should never see "sputnik, sputnik, sputnik". Greedy pass: when a
+ * triple forms, pull the next differently-sourced card forward.
+ */
+function breakSourceStreaks(list: Scored[]): Scored[] {
+  const out = [...list];
+  for (let i = 2; i < out.length; i++) {
+    if (
+      out[i].dominantSource === out[i - 1].dominantSource &&
+      out[i].dominantSource === out[i - 2].dominantSource
+    ) {
+      let j = i + 1;
+      while (j < out.length && out[j].dominantSource === out[i].dominantSource) j++;
+      if (j < out.length) {
+        const [swap] = out.splice(j, 1);
+        out.splice(i, 0, swap);
+      }
+    }
+  }
+  return out;
 }
 
 // Trim a possibly-truncated string back to its last complete sentence so
@@ -253,7 +296,7 @@ export async function loadTop24(): Promise<AgendaEvent[]> {
         restScored.push(s);
       }
     }
-    const picked = [...deck, ...restScored];
+    const picked = [...breakSourceStreaks(deck), ...restScored];
 
     return picked.map<AgendaEvent>(({ event: e, sources: eSources }) => {
       const sources: EventSource[] = eSources.map((es) => {

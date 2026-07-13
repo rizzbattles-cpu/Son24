@@ -258,6 +258,25 @@ function cosine(a, b) {
   return dot / (Math.sqrt(na) * Math.sqrt(nb) || 1);
 }
 
+// Country / bloc / leader entities for hybrid background matching. When a new
+// event mentions e.g. Yunanistan, past events mentioning Yunanistan are strong
+// background candidates even if the embedding distance alone wouldn't qualify
+// (different wording, different category — Siyaset vs Dış Politika).
+const BG_ENTITIES = [
+  'abd', 'amerika', 'washington', 'rusya', 'moskova', 'ukrayna', 'israil', 'iran',
+  'yunanistan', 'atina', 'almanya', 'fransa', 'ingiltere', 'çin', 'azerbaycan',
+  'ermenistan', 'suriye', 'irak', 'kıbrıs', 'kktc', 'ege', 'akdeniz', 'nato',
+  'avrupa birliği', 'birleşmiş milletler', ' bm ', 'imf', 'katar', 'suudi',
+  'mısır', 'libya', 'gürcistan', 'bulgaristan', 'pakistan', 'hindistan',
+  'japonya', 'güney kore', 'kuzey kore', 'filistin', 'gazze', 'lübnan', 'yemen',
+  'somali', 'balkan', 'trump', 'putin', 'zelenski', 'netanyahu', 'macron',
+  'savunma sanayi', 'baykar', 'aselsan', 'roketsan', 'f-16', 'f-35', 'kaan',
+];
+function extractEntities(text) {
+  const t = ` ${String(text).toLocaleLowerCase('tr-TR')} `;
+  return new Set(BG_ENTITIES.filter((e) => t.includes(e)));
+}
+
 async function loadBackgroundPool() {
   const cutoff = new Date(Date.now() - RELATED_WINDOW_DAYS * 86400 * 1000).toISOString();
   const { data, error } = await supabase
@@ -288,29 +307,46 @@ async function loadBackgroundPool() {
         vectors: [vec],
       });
   }
-  for (const e of byEvent.values()) e.centroid = centroid(e.vectors);
+  for (const e of byEvent.values()) {
+    e.centroid = centroid(e.vectors);
+    e.entities = extractEntities(`${e.title} ${e.summary}`);
+  }
   console.log(`[llm] background pool: ${byEvent.size} events (${RELATED_WINDOW_DAYS}d window)`);
   return byEvent;
 }
 
 /**
- * Find up to RELATED_MAX older events on the same storyline. "Older" =
- * first seen 24h+ before the pending event, same category, cosine ≥ threshold.
+ * Find up to RELATED_MAX older events on the same storyline. Hybrid match:
+ *   (a) embedding cosine ≥ RELATED_THRESHOLD within the SAME category, OR
+ *   (b) a shared country/actor entity + a looser cosine (≥ 0.38), ANY category
+ *       — "Yunanistan bugün konuştu" pairs with last week's Yunanistan event
+ *       even if it was filed under a different category or worded differently.
+ * Ranked by cosine + entity bonus. "Older" = first seen 24h+ before.
  */
-function findRelated(pool, evt) {
+function findRelated(pool, evt, evtText = '') {
   const self = pool.get(evt.id);
   if (!self?.centroid) return [];
   const evtSeen = new Date(evt.first_seen_at ?? Date.now());
+  const evtEntities = new Set([
+    ...(self.entities ?? []),
+    ...extractEntities(evtText),
+  ]);
+
   const scored = [];
   for (const cand of pool.values()) {
     if (cand.id === evt.id) continue;
-    if (cand.category !== evt.category) continue;
     if (evtSeen - cand.firstSeen < 24 * 3600 * 1000) continue; // must be genuinely older
     const sim = cosine(self.centroid, cand.centroid);
-    if (sim >= RELATED_THRESHOLD) scored.push({ cand, sim });
+    const shared = [...(cand.entities ?? [])].filter((x) => evtEntities.has(x)).length;
+
+    const sameCatPass = cand.category === evt.category && sim >= RELATED_THRESHOLD;
+    const entityPass = shared >= 1 && sim >= 0.38;
+    if (!sameCatPass && !entityPass) continue;
+
+    scored.push({ cand, score: sim + Math.min(shared, 2) * 0.12, shared });
   }
-  scored.sort((a, b) => b.sim - a.sim);
-  return scored.slice(0, RELATED_MAX).map(({ cand, sim }) => ({ ...cand, sim }));
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, RELATED_MAX).map(({ cand, score, shared }) => ({ ...cand, sim: score, shared }));
 }
 
 const LEAN_LABEL = {
@@ -361,7 +397,12 @@ async function processOne(evt, pool) {
     .join('\n\n');
 
   // Real, dated history from the embedding pool → anchors story steps.
-  const related = findRelated(pool, evt);
+  // Entity text includes source titles + first slice of the article bodies so
+  // country/actor names buried in the text still trigger a background match.
+  const entityText =
+    `${evt.title} ` +
+    perSource.map((s) => `${s.title} ${s.body.slice(0, 400)}`).join(' ');
+  const related = findRelated(pool, evt, entityText);
   const backgroundBlock =
     related.length > 0
       ? `\nGEÇMİŞ İLGİLİ GELİŞMELER (aynı konunun önceki bölümleri — hikaye adımlarında ve how_we_got_here'da bu GERÇEK tarihleri kullan):\n` +
