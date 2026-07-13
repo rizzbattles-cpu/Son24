@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, Pressable, Image as RNImage } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, Platform, Image as RNImage } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { CardPalette, CardFonts, Spacing } from '@/constants/theme';
@@ -9,6 +9,22 @@ import { StoryTimeline } from './StoryTimeline';
 const PAPER_TEXTURE = require('../../assets/images/crumpled-paper.png');
 // alias so texture <Image> (RN native) doesn't collide with expo-image
 const RNImageComponent = RNImage;
+
+// Always-visible thin scrollbar for the in-card text boxes (web) so readers
+// can SEE the content scrolls. Native shows the standard indicator.
+if (Platform.OS === 'web' && typeof document !== 'undefined') {
+  const STYLE_ID = 'son24-cardscroll';
+  if (!document.getElementById(STYLE_ID)) {
+    const el = document.createElement('style');
+    el.id = STYLE_ID;
+    el.textContent =
+      '[data-cardscroll]{scrollbar-width:thin;scrollbar-color:#96523d rgba(0,0,0,0.07);overscroll-behavior:contain;}' +
+      '[data-cardscroll]::-webkit-scrollbar{width:4px}' +
+      '[data-cardscroll]::-webkit-scrollbar-thumb{background:#96523d;border-radius:2px}' +
+      '[data-cardscroll]::-webkit-scrollbar-track{background:rgba(0,0,0,0.07);border-radius:2px}';
+    document.head.appendChild(el);
+  }
+}
 
 // Print-look palette tuned to the reference screenshot: the whole card is
 // aged cream paper with a thin dark frame — no dark strip.
@@ -21,14 +37,15 @@ const FRAME = '#2a2114'; // thin dark border around the card
 export type Layer = 'summary' | 'sources' | 'story';
 
 // Scale the headline down as it gets longer so it always fits without being
-// truncated — no "…", no clipped text, on any screen size.
+// truncated — no "…", no clipped text, on any screen size. (Montserrat runs
+// wider than a serif, so the scale is a step smaller.)
 function titleSizing(title: string) {
   const n = title.length;
-  if (n <= 34) return { fontSize: 27, lineHeight: 32 };
-  if (n <= 52) return { fontSize: 24, lineHeight: 29 };
-  if (n <= 72) return { fontSize: 22, lineHeight: 27 };
-  if (n <= 96) return { fontSize: 19, lineHeight: 24 };
-  return { fontSize: 17, lineHeight: 22 };
+  if (n <= 34) return { fontSize: 22, lineHeight: 28 };
+  if (n <= 52) return { fontSize: 20, lineHeight: 26 };
+  if (n <= 72) return { fontSize: 18, lineHeight: 24 };
+  if (n <= 96) return { fontSize: 16, lineHeight: 21 };
+  return { fontSize: 14.5, lineHeight: 19 };
 }
 
 const M_LONG = ['OCAK', 'ŞUBAT', 'MART', 'NİSAN', 'MAYIS', 'HAZİRAN', 'TEMMUZ', 'AĞUSTOS', 'EYLÜL', 'EKİM', 'KASIM', 'ARALIK'];
@@ -38,12 +55,11 @@ function fmtMastheadDate(iso: string) {
   return `${d.getDate()} ${M_LONG[d.getMonth()]} ${d.getFullYear()} · ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-// Same idea for the summary body — shrink long summaries so they fit the card
-// without an ellipsis. (Text is already word-capped upstream.)
+// Summary sizing — the text lives in a scrollable box now, so no aggressive
+// shrinking is needed; this only nudges very long texts down a step.
 function summarySizing(summary: string) {
   const n = summary.length;
-  if (n <= 150) return { fontSize: 16, lineHeight: 24 };
-  if (n <= 210) return { fontSize: 14.5, lineHeight: 22 };
+  if (n <= 180) return { fontSize: 14, lineHeight: 22 };
   return { fontSize: 13, lineHeight: 20 };
 }
 
@@ -121,19 +137,34 @@ export function EventCard({
                 cachePolicy="memory-disk"
               />
             )}
-            {/* Summary under the photo — fits without overflow */}
-            <View style={styles.pad}>
+            {/* Summary in a scrollable box — thin bar shows it scrolls; the
+                card itself still swipes from anywhere outside this box. */}
+            <View style={[styles.pad, styles.boxWrap]}>
               <View style={styles.dashRule} />
-              <Text style={[styles.summary, summarySizing(event.summary)]}>{event.summary}</Text>
+              <ScrollView
+                style={styles.textBox}
+                contentContainerStyle={styles.textBoxContent}
+                showsVerticalScrollIndicator
+                nestedScrollEnabled
+                {...({ dataSet: { cardscroll: '1' } } as object)}>
+                <Text style={[styles.summary, summarySizing(event.summary)]}>{event.summary}</Text>
+              </ScrollView>
             </View>
           </View>
         ) : (
-          <View style={[styles.body, styles.pad, styles.layerBody]}>
-            {layer === 'sources' ? (
-              <SourceList sources={event.sources} eventId={event.id} />
-            ) : (
-              <StoryTimeline event={event} compact={height < 540} />
-            )}
+          <View style={[styles.body, styles.pad, styles.layerBody, styles.boxWrap]}>
+            <ScrollView
+              style={styles.textBox}
+              contentContainerStyle={styles.textBoxContent}
+              showsVerticalScrollIndicator
+              nestedScrollEnabled
+              {...({ dataSet: { cardscroll: '1' } } as object)}>
+              {layer === 'sources' ? (
+                <SourceList sources={event.sources} eventId={event.id} />
+              ) : (
+                <StoryTimeline event={event} compact={height < 540} />
+              )}
+            </ScrollView>
           </View>
         )}
 
@@ -189,8 +220,8 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
   },
   stripRule: { height: 1, backgroundColor: FRAME, marginHorizontal: 0 },
-  stripCat: { color: RED, fontFamily: CardFonts.sansBold, fontSize: 13, letterSpacing: 2.5 },
-  stripDate: { color: INK, fontFamily: CardFonts.sansMed, fontSize: 10.5, letterSpacing: 0.5 },
+  stripCat: { color: RED, fontFamily: CardFonts.sansBold, fontSize: 12, letterSpacing: 1 },
+  stripDate: { color: INK, fontFamily: CardFonts.sansMed, fontSize: 10, letterSpacing: 0.2 },
   closeBtn: { marginLeft: 2, width: 22, height: 22, alignItems: 'center', justifyContent: 'center' },
   closeX: { color: INK, fontSize: 22, lineHeight: 22, marginTop: -2 },
   paper: { flex: 1, backgroundColor: PAPER, overflow: 'hidden' },
@@ -203,9 +234,8 @@ const styles = StyleSheet.create({
   pad: { paddingHorizontal: 18 },
   title: {
     color: INK,
-    fontFamily: CardFonts.display,
-    fontWeight: '800', // a touch bolder (web synthesizes; native uses the 700 file)
-    letterSpacing: -0.2,
+    fontFamily: CardFonts.display, // Montserrat Bold
+    letterSpacing: 0,
     paddingTop: 14,
     paddingBottom: 12,
   },
@@ -220,6 +250,11 @@ const styles = StyleSheet.create({
   },
   body: { flex: 1, overflow: 'hidden' },
   layerBody: { paddingTop: 8 },
+  // Scrollable text box: bounded (flex) area with its own scrollbar; the deck
+  // swipe still works from anywhere outside it.
+  boxWrap: { flex: 1 },
+  textBox: { flex: 1 },
+  textBoxContent: { paddingBottom: 8, paddingRight: 8 },
   photo: { width: '100%', backgroundColor: CardPalette.bgAlt },
   dashRule: {
     marginTop: 14,
@@ -229,7 +264,7 @@ const styles = StyleSheet.create({
     borderColor: RULE,
     borderStyle: 'dashed',
   },
-  summary: { color: INK, fontFamily: CardFonts.serifBody, fontWeight: '600' },
+  summary: { color: INK, fontFamily: CardFonts.body },
   // Footer
   footer: { backgroundColor: PAPER, zIndex: 5 },
   footerRule: { height: 1, backgroundColor: RULE },
@@ -243,7 +278,7 @@ const styles = StyleSheet.create({
   },
   tabs: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   tab: { alignItems: 'center' },
-  tabLabel: { color: '#6b5c3f', fontFamily: CardFonts.sansBold, fontSize: 12, letterSpacing: 2 },
+  tabLabel: { color: '#6b5c3f', fontFamily: CardFonts.sansBold, fontSize: 11.5, letterSpacing: 1 },
   tabLabelOn: { color: INK },
   tabUnderline: { marginTop: 4, width: 16, height: 2, borderRadius: 1, backgroundColor: RED },
   footerIcons: { flexDirection: 'row', alignItems: 'center', gap: 16 },

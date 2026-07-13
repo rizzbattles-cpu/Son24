@@ -32,6 +32,12 @@ import {
   LibreBaskerville_700Bold,
   LibreBaskerville_400Regular_Italic,
 } from '@expo-google-fonts/libre-baskerville';
+import {
+  Montserrat_400Regular,
+  Montserrat_500Medium,
+  Montserrat_600SemiBold,
+  Montserrat_700Bold,
+} from '@expo-google-fonts/montserrat';
 
 import { NewsprintColors } from '@/constants/theme';
 
@@ -71,6 +77,10 @@ function RootLayout() {
     LibreBaskerville_400Regular,
     LibreBaskerville_700Bold,
     LibreBaskerville_400Regular_Italic,
+    Montserrat_400Regular,
+    Montserrat_500Medium,
+    Montserrat_600SemiBold,
+    Montserrat_700Bold,
   });
 
   useEffect(() => {

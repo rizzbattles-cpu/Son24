@@ -37,9 +37,9 @@ export function CardFeed({ events, startIndex, onClose }: Props) {
   }, [events]);
 
   const cardWidth = Math.min(winW * 0.88, 520);
-  // Compact card: ~56% of the window so the blurred home peeks above and
-  // below. Clamped so text layers stay readable on small screens.
-  const cardHeight = Math.min(Math.max(400, Math.round(winH * 0.56)), 620);
+  // Compact card: ~62% of the window — a touch taller top and bottom, but the
+  // blurred home still peeks through. Clamped for small screens.
+  const cardHeight = Math.min(Math.max(430, Math.round(winH * 0.62)), 680);
 
   const handleIndex = useCallback(
     (index: number) => {

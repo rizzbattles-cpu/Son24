@@ -75,16 +75,17 @@ export const Fonts = {
   sansBold: 'Rubik_700Bold',
 } as const;
 
-// One typeface everywhere: Libre Baskerville. Headings Bold, text Regular.
+// One typeface everywhere: Montserrat. Headings Bold, body Regular/Medium —
+// readable, compact, no exaggerated letter spacing.
 export const CardFonts = {
-  display: 'LibreBaskerville_700Bold', // card title / main heading
-  displayBold: 'LibreBaskerville_700Bold',
-  serifBody: 'LibreBaskerville_400Regular', // summary / quotes / body
-  head: 'LibreBaskerville_700Bold', // sub-headlines
-  body: 'LibreBaskerville_400Regular',
-  sans: 'LibreBaskerville_400Regular',
-  sansMed: 'LibreBaskerville_400Regular',
-  sansBold: 'LibreBaskerville_700Bold', // category label, tab labels
+  display: 'Montserrat_700Bold', // card title / main heading
+  displayBold: 'Montserrat_700Bold',
+  serifBody: 'Montserrat_400Regular', // summary / quotes / body
+  head: 'Montserrat_600SemiBold', // sub-headlines
+  body: 'Montserrat_400Regular',
+  sans: 'Montserrat_400Regular',
+  sansMed: 'Montserrat_500Medium',
+  sansBold: 'Montserrat_700Bold', // category label, tab labels
 } as const;
 
 // System-font fallbacks used by any legacy scaffolded component that reads
