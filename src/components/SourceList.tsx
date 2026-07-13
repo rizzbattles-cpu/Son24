@@ -15,7 +15,7 @@ const GROUP_LABEL: Record<SourceLean, string> = {
   ajans: 'AJANSLAR',
 };
 
-const MAX_TOTAL = 4; // fits comfortably on any card size
+const MAX_TOTAL = 8; // the list lives in a scrollable box — show plenty
 
 export function SourceList({ sources, eventId }: { sources: EventSource[]; eventId?: string }) {
   // bucket by lean; fall back to "yabanci" if missing
@@ -48,7 +48,7 @@ export function SourceList({ sources, eventId }: { sources: EventSource[]; event
               </View>
               <Text style={styles.author} numberOfLines={1}>{s.author}</Text>
             </View>
-            <Text style={styles.body} numberOfLines={2}>“{s.quote ?? s.body}”</Text>
+            <Text style={styles.body}>“{s.quote ?? s.body}”</Text>
             {s.url && (
               <Pressable
                 onPress={() => {

@@ -95,11 +95,11 @@ Makale metinleri (numaralı):
 {background_block}
 UZUNLUK KURALLARI (ÖNEMLİ, kesinlikle uy):
 - title: 5-9 kelime, en fazla 60 karakter
-- summary: 2-3 cümle, toplam 35-45 kelime
-- current_status: TEK cümle, en fazla 90 karakter
+- summary: 2-4 cümle, toplam 40-70 kelime
+- current_status: 1-2 TAM cümle, en fazla 140 karakter
 - story[].relative: kısa tarih veya dürüst yaklaşık ifade, en fazla 14 karakter
-- story[].headline: 2-4 kelime, en fazla 25 karakter, KISA olsun
-- story[].detail: TEK tam cümle, en fazla 65 karakter — asla yarım cümle bırakma
+- story[].headline: 2-5 kelime, en fazla 32 karakter
+- story[].detail: 1-2 TAM cümle, en fazla 160 karakter — olayı somut anlat, asla yarım cümle bırakma
 - Her alan mutlaka nokta/ünlem/soru ile bitmeli, cümlenin ortasında bitmesin
 
 CEVAP: SADECE aşağıdaki JSON formatını ver, başka açıklama yazma.

@@ -310,7 +310,7 @@ export async function loadTop24(): Promise<AgendaEvent[]> {
           author: raw.sources.name,
           role: es.role_in_event === 'primary' ? 'Birincil Kaynak' : 'İlgili Açıklama',
           timestamp: fmtDate(raw.published_at),
-          body: quote ?? conciseSummary(raw.body ?? raw.title, 26),
+          body: quote ?? conciseSummary(raw.body ?? raw.title, 50),
           quote,
           url: raw.url ?? undefined,
           linkLabel: raw.url ? linkLabelFor(raw.sources.id) : undefined,
@@ -326,19 +326,23 @@ export async function loadTop24(): Promise<AgendaEvent[]> {
         category: (e.category as Category) ?? 'Siyaset',
         kicker: e.kicker ?? '',
         title: e.title,
-        summary: conciseSummary(e.summary),
+        // Generous cap (sentence-aligned): the summary box scrolls, so the
+        // LLM's full 35-45 word summary is never chopped mid-sentence.
+        summary: conciseSummary(e.summary, 80),
         updatedAt: e.last_updated_at,
         readSeconds: e.read_seconds ?? 20,
         sources,
         imageUrl,
+        // No word-capping here anymore: the card's text areas scroll, so story
+        // steps and status ship FULL — never a half sentence on screen.
         story:
           Array.isArray(e.story) && e.story.length > 0
             ? e.story.map((s, i) => ({
                 id: `${e.id}-step-${i}`,
                 date: fmtDate(e.last_updated_at),
                 relative: s.relative ?? '',
-                headline: conciseSummary(s.headline ?? '', 7),
-                detail: conciseSummary(s.detail ?? '', 16),
+                headline: (s.headline ?? '').trim(),
+                detail: toCompleteSentence(s.detail ?? ''),
               }))
             : [
                 {
@@ -346,11 +350,11 @@ export async function loadTop24(): Promise<AgendaEvent[]> {
                   date: fmtDate(e.last_updated_at),
                   relative: 'Bugün',
                   headline: 'İlk kayıt',
-                  detail: conciseSummary(e.title, 16),
+                  detail: toCompleteSentence(e.title),
                 },
               ],
         context: {
-          current: conciseSummary(e.current_status ?? 'İzleme sürüyor.', 20),
+          current: toCompleteSentence(e.current_status ?? 'İzleme sürüyor.'),
           howWeGotHere: e.how_we_got_here ?? 'Ek kaynaklar toplandıkça bu bölüm zenginleşecek.',
           actors: e.actors ?? [],
           nextDate: e.next_date ?? undefined,
