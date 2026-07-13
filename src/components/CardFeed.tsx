@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { View, StyleSheet, useWindowDimensions, Pressable, Text } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BlurView } from 'expo-blur';
 
 import { NewsprintColors } from '@/constants/theme';
 import { CardStack, FeedItem } from './CardStack';
@@ -14,7 +15,12 @@ interface Props {
   onClose: () => void;
 }
 
-// Full-screen card-swipe reader (Reels-style), opened from the Home screen.
+// Height reserved for the home screen's bottom nav that stays visible under
+// the overlay — the swipe hint sits just above it, on the blur.
+const NAV_SPACE = 78;
+
+// Compact reader overlaid on the Home screen: home shows through, blurred,
+// above and below the card; the bottom nav stays visible (rendered above us).
 export function CardFeed({ events, startIndex, onClose }: Props) {
   const insets = useSafeAreaInsets();
   const { width: winW, height: winH } = useWindowDimensions();
@@ -30,11 +36,10 @@ export function CardFeed({ events, startIndex, onClose }: Props) {
     return items;
   }, [events]);
 
-  const cardWidth = Math.min(winW * 0.9, 540);
-  // Sized from the window, not onLayout: react-native-web's onLayout on the
-  // stage proved unreliable (never fired → cards never mounted). Top bar ≈56,
-  // swipe hint ≈58, breathing room 40.
-  const cardHeight = Math.max(340, winH - insets.top - insets.bottom - 56 - 58 - 40);
+  const cardWidth = Math.min(winW * 0.88, 520);
+  // Compact card: ~56% of the window so the blurred home peeks above and
+  // below. Clamped so text layers stay readable on small screens.
+  const cardHeight = Math.min(Math.max(400, Math.round(winH * 0.56)), 620);
 
   const handleIndex = useCallback(
     (index: number) => {
@@ -45,8 +50,12 @@ export function CardFeed({ events, startIndex, onClose }: Props) {
   );
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-      <View style={styles.topBar}>
+    <View style={styles.root}>
+      {/* Blurred home backdrop + dark scrim for card contrast */}
+      <BlurView intensity={34} tint="dark" style={styles.fill} />
+      <View style={[styles.fill, styles.scrim]} />
+
+      <View style={[styles.topBar, { marginTop: insets.top }]}>
         <Pressable onPress={onClose} hitSlop={12} style={styles.closeBtn}>
           <Text style={styles.closeX}>×</Text>
         </Pressable>
@@ -70,8 +79,9 @@ export function CardFeed({ events, startIndex, onClose }: Props) {
         />
       </View>
 
+      {/* Swipe hint — sits on the blur, just above the visible bottom nav */}
       {activeIndex < feedItems.length - 1 && (
-        <View style={styles.swipeHint} pointerEvents="none">
+        <View style={[styles.swipeHint, { paddingBottom: NAV_SPACE + (insets.bottom || 8) }]} pointerEvents="none">
           <Text style={styles.swipeHintArrow}>⌄</Text>
           <Text style={styles.swipeHintText}>KAYDIR</Text>
         </View>
@@ -81,13 +91,15 @@ export function CardFeed({ events, startIndex, onClose }: Props) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: NewsprintColors.ink },
+  root: { flex: 1 },
+  fill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  scrim: { backgroundColor: 'rgba(6, 5, 3, 0.45)' },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingVertical: 4,
   },
   closeBtn: {
     width: 40,
@@ -105,18 +117,17 @@ const styles = StyleSheet.create({
   stage: { flex: 1, overflow: 'hidden' },
   swipeHint: {
     alignItems: 'center',
-    paddingTop: 10,
-    paddingBottom: 18,
+    paddingTop: 6,
     gap: 2,
   },
   swipeHintArrow: {
-    color: NewsprintColors.paperMuted,
+    color: NewsprintColors.paper,
     fontSize: 20,
     lineHeight: 18,
     fontFamily: 'Rubik_700Bold',
   },
   swipeHintText: {
-    color: NewsprintColors.paperMuted,
+    color: NewsprintColors.paper,
     fontFamily: 'Rubik_700Bold',
     fontSize: 9,
     letterSpacing: 3,

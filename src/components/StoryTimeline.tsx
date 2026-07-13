@@ -47,7 +47,7 @@ function TimelineStep({ step, isLast, z }: { step: StoryStep; isLast: boolean; z
   );
 }
 
-export function StoryTimeline({ event }: { event: AgendaEvent }) {
+export function StoryTimeline({ event, compact = false }: { event: AgendaEvent; compact?: boolean }) {
   const [availableH, setAvailableH] = useState(0);
   const [expanded, setExpanded] = useState(false);
 
@@ -61,14 +61,17 @@ export function StoryTimeline({ event }: { event: AgendaEvent }) {
     detail: clampChars(s.detail, 90),
   }));
 
-  const isTight = availableH > 0 && availableH < 240;
+  // `compact` comes from the card's known height (deterministic); the measured
+  // height is only a refinement on top — some web environments never fire
+  // onLayout, so nothing may depend on it alone.
+  const isTight = compact || (availableH > 0 && availableH < 240);
   const visibleSteps = isTight ? rawSteps.slice(0, 1) : rawSteps.slice(0, 2);
   const hasMore = rawSteps.length > visibleSteps.length;
 
-  const now = clampChars(event.context.current ?? '', 110);
+  const now = clampChars(event.context.current ?? '', compact ? 80 : 110);
   const charLen =
     now.length + visibleSteps.reduce((n, s) => n + s.headline.length + s.detail.length, 0);
-  const z = pickProfile(availableH || 320, charLen);
+  const z = pickProfile(availableH || (compact ? 200 : 320), charLen);
 
   return (
     <View style={styles.wrap} onLayout={onLayout}>

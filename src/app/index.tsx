@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   Pressable,
-  Modal,
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
@@ -72,7 +71,9 @@ export default function HomeScreen() {
   const [cardEvents, setCardEvents] = useState<AgendaEvent[]>([]);
   const [visibleCount, setVisibleCount] = useState(12);
   const scrollRef = useRef<ScrollView>(null);
-  const dayY = useRef<Record<string, number>>({});
+  // Day-section nodes, measured on demand (measureLayout) — reliable everywhere,
+  // unlike onLayout which some web environments never fire.
+  const dayRefs = useRef<Record<string, unknown>>({});
 
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -135,8 +136,41 @@ export default function HomeScreen() {
   }, [visibleRest]);
 
   const scrollToDay = useCallback((k: string) => {
-    const y = dayY.current[k];
-    if (y != null) scrollRef.current?.scrollTo({ y: Math.max(0, y - 8), animated: true });
+    // Glide to the day section. On web the ref IS the DOM element, so native
+    // scrollIntoView is the most reliable path; native RN uses measureLayout.
+    const attempt = () => {
+      /* eslint-disable @typescript-eslint/no-explicit-any */
+      const node = dayRefs.current[k] as any;
+      const sv = scrollRef.current as any;
+      if (!node || !sv) return false;
+      if (typeof node.scrollIntoView === 'function') {
+        node.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        // Some environments silently ignore smooth scrolling — if the section
+        // hasn't moved into view shortly after, jump instantly instead.
+        setTimeout(() => {
+          const r = node.getBoundingClientRect?.();
+          if (r && (r.top > 400 || r.top < -100)) node.scrollIntoView({ behavior: 'auto', block: 'start' });
+        }, 700);
+        return true;
+      }
+      const inner = sv.getInnerViewNode?.();
+      if (!inner || typeof node.measureLayout !== 'function') return false;
+      node.measureLayout(
+        inner,
+        (_x: number, y: number) => sv.scrollTo({ y: Math.max(0, y - 8), animated: true }),
+        () => {}
+      );
+      return true;
+      /* eslint-enable @typescript-eslint/no-explicit-any */
+    };
+    if (attempt()) return;
+    // Day hidden behind "DAHA FAZLA GÖSTER" — reveal the whole list, then keep
+    // trying until the section mounts (≤2.5s), and glide straight to it.
+    setVisibleCount(Number.MAX_SAFE_INTEGER);
+    let tries = 0;
+    const iv = setInterval(() => {
+      if (attempt() || ++tries > 25) clearInterval(iv);
+    }, 100);
   }, []);
 
   const { headerDate, headerDay } = useMemo(() => {
@@ -278,7 +312,7 @@ export default function HomeScreen() {
           return grouped.map((g) => (
             <View
               key={g.key}
-              onLayout={(ev) => { dayY.current[g.key] = ev.nativeEvent.layout.y; }}>
+              ref={(r) => { dayRefs.current[g.key] = r; }}>
               <View style={styles.dayHeader}>
                 <Text style={styles.dayHeaderText}>{g.date.getDate()} {MONTHS[g.date.getMonth()]}</Text>
                 <View style={styles.dayHeaderLine} />
@@ -330,9 +364,17 @@ export default function HomeScreen() {
       </ScrollView>
       )}
 
+      {/* Card reader — inline overlay UNDER the bottom nav (nav stays visible).
+          Home shows through blurred above/below the compact card. */}
+      {cardOpen && (
+        <View style={styles.readerOverlay}>
+          <CardFeed events={cardEvents} startIndex={cardStart} onClose={() => setCardOpen(false)} />
+        </View>
+      )}
+
       {/* Bottom nav */}
       <View style={[styles.nav, { paddingBottom: insets.bottom || 8 }]}>
-        <NavItem icon="home" label="Ana Sayfa" active />
+        <NavItem icon="home" label="Ana Sayfa" active onPress={() => setCardOpen(false)} />
         <NavItem icon="git-branch-outline" label="Zaman Çizelgesi" />
         <Pressable style={styles.navCenter} onPress={() => cards.length > 0 && openCards(cards, 0)}>
           <View style={styles.navCenterCircle}>
@@ -340,12 +382,8 @@ export default function HomeScreen() {
           </View>
         </Pressable>
         <NavItem icon="albums-outline" label="Kaynaklar" />
-        <NavItem icon="person-outline" label="Profil" onPress={() => router.push('/profil')} />
+        <NavItem icon="person-outline" label="Profil" onPress={() => { setCardOpen(false); router.push('/profil'); }} />
       </View>
-
-      <Modal visible={cardOpen} animationType="slide" onRequestClose={() => setCardOpen(false)}>
-        <CardFeed events={cardEvents} startIndex={cardStart} onClose={() => setCardOpen(false)} />
-      </Modal>
     </View>
   );
 }
@@ -531,6 +569,7 @@ const styles = StyleSheet.create({
   },
   retryText: { color: Gold.gold, fontFamily: 'Rubik_700Bold', fontSize: 12, letterSpacing: 1 },
 
+  readerOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 20 },
   nav: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -539,6 +578,7 @@ const styles = StyleSheet.create({
     borderColor: Gold.line,
     backgroundColor: Gold.surface,
     paddingTop: 8,
+    zIndex: 30, // above the reader overlay — nav stays visible while reading
   },
   navItem: { alignItems: 'center', gap: 3, flex: 1 },
   navLabel: { color: Gold.textDim, fontFamily: 'Rubik_500Medium', fontSize: 9 },

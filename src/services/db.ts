@@ -54,8 +54,8 @@ const LAUNCH_DATE = '2026-07-08T00:00:00Z';
 // Pull the newest N as the working set — keeps the payload light no matter how
 // large the archive grows (older days simply require nothing extra to store).
 const FETCH_LIMIT = 300;
-const MAX_CARDS = 60;
-const MAX_PER_SOURCE = 8; // keep one outlet from utterly dominating
+const DECK_SIZE = 20; // the swipe deck — per-source cap applies only here
+const MAX_PER_SOURCE = 8; // keep one outlet from dominating the deck
 
 // Core categories dominate the 20 cards; the rest only break in on a genuinely
 // big story (their low weight means high importance is needed to rank).
@@ -238,15 +238,22 @@ export async function loadTop24(): Promise<AgendaEvent[]> {
     });
     scored.sort((a, b) => b.importance - a.importance);
 
+    // Fill the swipe deck (top DECK_SIZE, per-source capped for variety), then
+    // append EVERYTHING else in importance order — the archive list must show
+    // every day since launch, nothing gets dropped.
     const perSource: Record<string, number> = {};
-    const picked: Scored[] = [];
+    const deck: Scored[] = [];
+    const restScored: Scored[] = [];
     for (const s of scored) {
-      if (picked.length >= MAX_CARDS) break;
       const n = perSource[s.dominantSource] ?? 0;
-      if (n >= MAX_PER_SOURCE) continue;
-      perSource[s.dominantSource] = n + 1;
-      picked.push(s);
+      if (deck.length < DECK_SIZE && n < MAX_PER_SOURCE) {
+        perSource[s.dominantSource] = n + 1;
+        deck.push(s);
+      } else {
+        restScored.push(s);
+      }
     }
+    const picked = [...deck, ...restScored];
 
     return picked.map<AgendaEvent>(({ event: e, sources: eSources }) => {
       const sources: EventSource[] = eSources.map((es) => {

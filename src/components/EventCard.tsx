@@ -75,9 +75,9 @@ export function EventCard({
 }: Props) {
   const isSummary = layer === 'summary';
   const showPhoto = isSummary && !!event.imageUrl;
-  // Photo takes a slice of the card; smaller on short screens so the title,
-  // summary and the bottom tabs always have room (never overlap).
-  const photoH = Math.max(110, Math.min(Math.round(height * 0.3), 176));
+  // Photo takes a slice of the card; smaller on short/compact cards so the
+  // title, summary and the bottom tabs always have room (never overlap).
+  const photoH = Math.max(100, Math.min(Math.round(height * 0.27), 160));
 
   return (
     <View style={[styles.card, { width, height }]}>
@@ -132,7 +132,7 @@ export function EventCard({
             {layer === 'sources' ? (
               <SourceList sources={event.sources} eventId={event.id} />
             ) : (
-              <StoryTimeline event={event} />
+              <StoryTimeline event={event} compact={height < 540} />
             )}
           </View>
         )}
@@ -204,9 +204,10 @@ const styles = StyleSheet.create({
   title: {
     color: INK,
     fontFamily: CardFonts.display,
+    fontWeight: '800', // a touch bolder (web synthesizes; native uses the 700 file)
     letterSpacing: -0.2,
-    paddingTop: 16,
-    paddingBottom: 14,
+    paddingTop: 14,
+    paddingBottom: 12,
   },
   sepLine: {
     marginLeft: 18, // align with the title's first letters
@@ -228,7 +229,7 @@ const styles = StyleSheet.create({
     borderColor: RULE,
     borderStyle: 'dashed',
   },
-  summary: { color: INK, fontFamily: CardFonts.serifBody },
+  summary: { color: INK, fontFamily: CardFonts.serifBody, fontWeight: '600' },
   // Footer
   footer: { backgroundColor: PAPER, zIndex: 5 },
   footerRule: { height: 1, backgroundColor: RULE },
