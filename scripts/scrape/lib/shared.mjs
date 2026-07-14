@@ -242,7 +242,9 @@ export function parseTrDate(str) {
   return new Date(Date.UTC(Number(year), mon, Number(day)));
 }
 
-const BAD_IMG = /logo|placeholder|default|favicon|amblem|icon|avatar|sprite|blank|banner|header|footer|pixel|1x1|spacer|\/assets\/|site_media|\/gfx\/|ataturk|bg-|print/i;
+// NOTE: match "default" only as a filename/suffix ("default.jpg", "default-img")
+// — Drupal serves real photos from /sites/default/files/, which must pass.
+const BAD_IMG = /logo|placeholder|default[-_.](?:jpe?g|png|webp|img|image|thumb)|favicon|amblem|icon|avatar|sprite|blank|banner|header|footer|pixel|1x1|spacer|\/assets\/|site_media|\/gfx\/|ataturk|bg-|print/i;
 
 function extractOg(html) {
   const og = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)

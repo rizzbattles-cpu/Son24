@@ -25,6 +25,7 @@ const STEPS = [
   ['scrape:zafer', 'scrape/zafer.mjs'],
   ['scrape:euronews', 'scrape/euronews.mjs'],
   ['scrape:sputnik', 'scrape/sputnik.mjs'],
+  ['scrape:trmedia', 'scrape/trmedia.mjs'],
   ['embed', 'llm/embed.mjs'],
   ['cluster', 'llm/cluster.mjs'],
   ['summarize', 'llm/summarize.mjs'],
