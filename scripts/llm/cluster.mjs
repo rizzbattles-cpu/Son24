@@ -96,7 +96,10 @@ async function run() {
     for (let j = i + 1; j < events.length; j++) {
       const b = events[j];
       if (merged.has(b.eventId)) continue;
-      if (b.category !== a.category) continue;
+      // Same category required for a normal merge; a near-identical embedding
+      // (≥0.92) merges even across categories — the same story often gets
+      // tagged Teknoloji by one outlet and Afet/Siyaset by another.
+      const crossCategory = b.category !== a.category;
       // Guard against merging two items from THE SAME single source — that's
       // almost certainly two different stories from one outlet whose titles
       // just look similar (e.g. Sputnik's "Dış Politika · ..." template).
@@ -108,7 +111,7 @@ async function run() {
       if (sameSourceMonoculture) continue;
       const cB = centroid(b.vectors);
       const sim = cosine(cA, cB);
-      if (sim < THRESHOLD) continue;
+      if (sim < (crossCategory ? Math.max(THRESHOLD, 0.92) : THRESHOLD)) continue;
 
       // Merge a → b. Relink event_sources, delete a, reset b's summary.
       const { error: linkErr } = await supabase

@@ -226,6 +226,22 @@ export async function ingest(sourceId, items, { signalOnly = false } = {}) {
   console.log(`[${sourceId}] linked ${links.length} sources`);
 }
 
+/**
+ * Decode HTML entities that arrive in RSS titles/descriptions
+ * (&#039; &quot; &amp; …) so cards never show raw entity codes.
+ */
+export function decodeEntities(s) {
+  return String(s)
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
+}
+
 // Turkish month names for parsing dates.
 export const TR_MONTHS = {
   Ocak: 0, Şubat: 1, Mart: 2, Nisan: 3, Mayıs: 4, Haziran: 5,

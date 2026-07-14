@@ -299,14 +299,28 @@ export async function loadTop24(): Promise<AgendaEvent[]> {
     // Fill the swipe deck (top DECK_SIZE, per-source capped for variety), then
     // append EVERYTHING else in importance order — the archive list must show
     // every day since launch, nothing gets dropped.
+    // Near-duplicate guard: two events telling the same story (≥60% shared
+    // title words) never BOTH enter the deck — the copy sinks to the list.
+    const normWords = (t: string) =>
+      new Set(t.toLocaleLowerCase('tr-TR').replace(/[^a-zçğıöşü0-9 ]/gi, '').split(/\s+/).filter((w) => w.length > 3));
+    const isNearDup = (a: Set<string>, b: Set<string>) => {
+      if (a.size === 0 || b.size === 0) return false;
+      let common = 0;
+      a.forEach((w) => { if (b.has(w)) common++; });
+      return common / Math.min(a.size, b.size) >= 0.6;
+    };
     const perSource: Record<string, number> = {};
     const deck: Scored[] = [];
+    const deckTitles: Set<string>[] = [];
     const restScored: Scored[] = [];
     for (const s of scored) {
       const n = perSource[s.dominantSource] ?? 0;
-      if (deck.length < DECK_SIZE && n < MAX_PER_SOURCE) {
+      const words = normWords(s.event.title);
+      const dup = deckTitles.some((t) => isNearDup(words, t));
+      if (deck.length < DECK_SIZE && n < MAX_PER_SOURCE && !dup) {
         perSource[s.dominantSource] = n + 1;
         deck.push(s);
+        deckTitles.push(words);
       } else {
         restScored.push(s);
       }

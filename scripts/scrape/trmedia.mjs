@@ -4,7 +4,7 @@
 // no SQL migration is needed to onboard one.
 
 import { XMLParser } from 'fast-xml-parser';
-import { fetchHtml, fetchOgImage, ingest, supabase } from './lib/shared.mjs';
+import { fetchHtml, fetchOgImage, ingest, supabase, decodeEntities } from './lib/shared.mjs';
 import { isRelevant, paraphraseBody } from './lib/filters.mjs';
 
 const OUTLETS = [
@@ -42,8 +42,9 @@ const parser = new XMLParser({ ignoreAttributes: false, trimValues: true });
 
 function guessCategory(text) {
   const t = text.toLowerCase();
+  if (/yapay zeka|chatgpt|openai|yazılım|siber|robot|uzay araştırma|nasa|spacex|akıllı telefon|teknoloji/.test(t)) return 'Teknoloji';
   if (/faiz|enflasyon|kur |bütçe|ekonomi|zamm|zam |imf|piyasa|borsa|asgari/.test(t)) return 'Ekonomi';
-  if (/deprem|afad|sel |yangın|kaza|fırtına/.test(t)) return 'Afet';
+  if (/deprem|afad|\bsel\b|yangın|\bkaza|fırtına|heyelan|enkaz/.test(t)) return 'Afet';
   if (/operasyon|gözaltı|tutukla|terör|şehit|saldırı|polis|jandarma/.test(t)) return 'Güvenlik';
   if (/nato|ab |avrupa birliği|dışişleri|zirve|diplomasi|büyükelçi|rusya|ukrayna|israil|iran|abd |yunanistan|çin /.test(t)) return 'Dış Politika';
   return 'Siyaset';
@@ -93,8 +94,8 @@ async function runOutlet(outlet) {
 
   const items = [];
   for (const it of rss) {
-    const title = String(it.title ?? '').trim();
-    const desc = String(it.description ?? '').replace(/<[^>]+>/g, ' ').trim();
+    const title = decodeEntities(String(it.title ?? '')).trim();
+    const desc = decodeEntities(String(it.description ?? '').replace(/<[^>]+>/g, ' ')).trim();
     if (!title) continue;
     if (!isRelevant(title, desc)) continue;
     const url = String(typeof it.link === 'object' ? it.link?.['#text'] ?? '' : it.link ?? '').trim();

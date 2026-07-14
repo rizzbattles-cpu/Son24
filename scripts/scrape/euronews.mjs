@@ -3,7 +3,7 @@
 // Tier: agency. Political/Türkiye-related items only. No verbatim.
 
 import { XMLParser } from 'fast-xml-parser';
-import { fetchHtml, fetchOgImage, ingest } from './lib/shared.mjs';
+import { fetchHtml, fetchOgImage, ingest, decodeEntities } from './lib/shared.mjs';
 import { isRelevant, paraphraseBody } from './lib/filters.mjs';
 
 const SOURCE_ID = 'euronews-tr';
@@ -30,8 +30,8 @@ async function run() {
 
   const items = [];
   for (const it of rss) {
-    const title = String(it.title ?? '').trim();
-    const desc = String(it.description ?? '').replace(/<[^>]+>/g, ' ').trim();
+    const title = decodeEntities(String(it.title ?? '')).trim();
+    const desc = decodeEntities(String(it.description ?? '').replace(/<[^>]+>/g, ' ')).trim();
     if (!title) continue;
     if (!isRelevant(title, desc)) continue;
     const url = String(it.link ?? '').trim();
