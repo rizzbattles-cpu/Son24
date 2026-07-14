@@ -153,8 +153,13 @@ async function run() {
       }
       const { error: delErr } = await supabase.from('events').delete().eq('id', a.eventId);
       if (delErr) console.warn(`  ✗ delete ${a.eventId}: ${delErr.message}`);
-      // Force b to be re-summarised now that it has more sources
-      await supabase.from('events').update({ llm_processed_at: null }).eq('id', b.eventId);
+      // Force b to be re-summarised, and mark the DEVELOPMENT time: a merge
+      // means new coverage arrived, so the story resurfaces in the ranking
+      // even if it was first seen days ago.
+      await supabase
+        .from('events')
+        .update({ llm_processed_at: null, last_updated_at: new Date().toISOString() })
+        .eq('id', b.eventId);
 
       merged.add(a.eventId);
       mergeCount++;

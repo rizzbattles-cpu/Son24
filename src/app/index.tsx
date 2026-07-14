@@ -74,6 +74,9 @@ export default function HomeScreen() {
   const [category, setCategory] = useState<CatKey>('Tümü');
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQ, setSearchQ] = useState('');
+  // True once the reader has been swiped past its last card — panels show
+  // "son haberler okundu" and the list continues from card 25.
+  const [deckDone, setDeckDone] = useState(false);
   const [cardOpen, setCardOpen] = useState(false);
   const [cardStart, setCardStart] = useState(0);
   const [cardEvents, setCardEvents] = useState<AgendaEvent[]>([]);
@@ -123,11 +126,13 @@ export default function HomeScreen() {
     return allEvents.filter((e) => e.category === category);
   }, [allEvents, category]);
 
-  // The swipe deck is the top-20 most important events (only). The Açık Konular
-  // list can show more, but the "cards" are gated to 20.
-  const cards = useMemo(() => feed.slice(0, 20), [feed]);
+  // The swipe deck is the top-24 most important events (only). The Açık Konular
+  // list can show more, but the "cards" are gated to 24.
+  const cards = useMemo(() => feed.slice(0, 24), [feed]);
   const featured = feed[0];
-  const rest = feed.slice(1);
+  // After the reader is finished, the list continues from card 25 — the 24
+  // read cards drop out and the reader picks up "buradan devam".
+  const rest = deckDone ? feed.slice(cards.length) : feed.slice(1);
 
   // Load-more: reveal the first N of the remaining, grouped by day.
   const visibleRest = rest.slice(0, visibleCount);
@@ -210,9 +215,14 @@ export default function HomeScreen() {
   // "Breathing" attention pulse for the BAŞLAMAK İÇİN DOKUN teaser.
   const pulse = useSharedValue(0);
   useEffect(() => {
-    pulse.value = withRepeat(withTiming(1, { duration: 650, easing: Easing.inOut(Easing.ease) }), -1, true);
+    // Breath slows down once the deck is finished — calm "all read" state.
+    pulse.value = withRepeat(
+      withTiming(1, { duration: deckDone ? 1800 : 650, easing: Easing.inOut(Easing.ease) }),
+      -1,
+      true
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [deckDone]);
   const teaserScaleStyle = useAnimatedStyle(() => ({
     transform: [{ scale: 1 + pulse.value * 0.02 }],
   }));
@@ -328,7 +338,7 @@ export default function HomeScreen() {
                   />
                 </View>
               </View>
-              <BlurView intensity={28} tint="dark" style={styles.teaserBlur} pointerEvents="none" />
+              <BlurView intensity={deckDone ? 16 : 28} tint="dark" style={styles.teaserBlur} pointerEvents="none" />
               {/* Soft white light around the edges — pulses like a breath */}
               <Animated.View
                 pointerEvents="none"
@@ -339,11 +349,21 @@ export default function HomeScreen() {
                 ]}
               />
               <View style={styles.teaserOverlay} pointerEvents="none">
-                <View style={styles.teaserPlay}>
-                  <Ionicons name="play" size={22} color={Gold.bg} />
-                </View>
-                <Text style={styles.teaserText}>BAŞLAMAK İÇİN DOKUN</Text>
-                <Text style={styles.teaserSub}>{cards.length} önemli olay · kaydırarak oku</Text>
+                {deckDone ? (
+                  <>
+                    <View style={styles.teaserDoneIcon}>
+                      <Ionicons name="checkmark" size={20} color={Gold.bg} />
+                    </View>
+                    <Text style={styles.teaserDoneText}>SON HABERLER OKUNDU</Text>
+                  </>
+                ) : (
+                  <>
+                    <View style={styles.teaserPlay}>
+                      <Ionicons name="play" size={22} color={Gold.bg} />
+                    </View>
+                    <Text style={styles.teaserText}>BAŞLAMAK İÇİN DOKUN</Text>
+                  </>
+                )}
               </View>
             </Pressable>
           </Animated.View>
@@ -354,6 +374,12 @@ export default function HomeScreen() {
           <>
             <Text style={styles.sectionLabel}>ÖNE ÇIKAN OLAY</Text>
             <Pressable style={styles.featured} onPress={() => openCards(cards, 0)}>
+              {deckDone && (
+                <View style={styles.readBadge} pointerEvents="none">
+                  <Ionicons name="checkmark-circle" size={13} color={Gold.gold} />
+                  <Text style={styles.readBadgeText}>SON HABERLER OKUNDU</Text>
+                </View>
+              )}
               {featured.imageUrl && (
                 <Image source={{ uri: featured.imageUrl }} style={styles.featuredImg} contentFit="cover" contentPosition="top" />
               )}
@@ -377,6 +403,12 @@ export default function HomeScreen() {
         )}
 
         {/* Açık Konular — grouped by date */}
+        {deckDone && rest.length > 0 && (
+          <View style={styles.continueBanner}>
+            <Ionicons name="arrow-down" size={13} color={Gold.gold} />
+            <Text style={styles.continueText}>BURADAN DEVAM EDİN</Text>
+          </View>
+        )}
         {rest.length > 0 && <Text style={styles.sectionLabel}>AÇIK KONULAR</Text>}
         {(() => {
           let n = 0; // running item counter across all day groups (for ads)
@@ -439,7 +471,15 @@ export default function HomeScreen() {
           Home shows through blurred above/below the compact card. */}
       {cardOpen && (
         <View style={styles.readerOverlay}>
-          <CardFeed events={cardEvents} startIndex={cardStart} onClose={() => setCardOpen(false)} />
+          <CardFeed
+            events={cardEvents}
+            startIndex={cardStart}
+            onClose={() => setCardOpen(false)}
+            onFinished={() => {
+              setDeckDone(true);
+              setCardOpen(false);
+            }}
+          />
         </View>
       )}
 
@@ -687,7 +727,46 @@ const styles = StyleSheet.create({
     paddingLeft: 3,
   },
   teaserText: { color: Gold.text, fontFamily: 'Rubik_800ExtraBold', fontSize: 13, letterSpacing: 2 },
-  teaserSub: { color: Gold.textMuted, fontFamily: 'Rubik_500Medium', fontSize: 10, letterSpacing: 0.5 },
+  teaserDoneIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: Gold.gold,
+    alignItems: 'center',
+    justifyContent: 'center',
+    opacity: 0.9,
+  },
+  teaserDoneText: { color: Gold.text, fontFamily: 'Rubik_700Bold', fontSize: 12, letterSpacing: 2, opacity: 0.9 },
+  readBadge: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    zIndex: 3,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(20, 19, 16, 0.55)',
+    borderWidth: 1,
+    borderColor: Gold.goldDim,
+    borderRadius: 14,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+  },
+  readBadgeText: { color: Gold.gold, fontFamily: 'Rubik_700Bold', fontSize: 9, letterSpacing: 1 },
+  continueBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 18,
+    marginHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Gold.goldDim,
+    backgroundColor: Gold.surface,
+  },
+  continueText: { color: Gold.gold, fontFamily: 'Rubik_700Bold', fontSize: 11, letterSpacing: 2 },
   adRow: {
     marginHorizontal: 16,
     marginVertical: 8,

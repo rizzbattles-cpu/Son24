@@ -54,8 +54,15 @@ const LAUNCH_DATE = '2026-07-08T00:00:00Z';
 // Pull the newest N as the working set — keeps the payload light no matter how
 // large the archive grows (older days simply require nothing extra to store).
 const FETCH_LIMIT = 300;
-const DECK_SIZE = 20; // the swipe deck — per-source cap applies only here
+const DECK_SIZE = 24; // the swipe deck — per-source cap applies only here
 const MAX_PER_SOURCE = 8; // keep one outlet from dominating the deck
+
+// Türkiye-relevance: used to bucket the feed (domestic first). Deliberately
+// NO generic role words (bakanlık, cumhurbaşkanı, meclis) — those match
+// foreign ministries/presidents too. TR-specific institutions, parties,
+// cities and domestic-justice terms only.
+const TR_RX =
+  /türkiye|türk|ankara|istanbul|izmir|erdoğan|tbmm|chp|akp|mhp|iyi parti|dem parti|zafer partisi|saadet|ahbap|asgari ücret|tcmb|lira|emekli|resmî gazete|diyanet|valili|emniyet|jandarma|savcılı|gözaltı|adliye|yargıtay|aym\b/i;
 
 // Core categories dominate the 20 cards; the rest only break in on a genuinely
 // big story (their low weight means high importance is needed to rank).
@@ -84,6 +91,8 @@ interface Scored {
   sources: EventSourceJoined[];
   importance: number;
   dominantSource: string;
+  /** 0 = TR+important, 1 = foreign+important, 2 = TR+minor, 3 = foreign+minor */
+  tier: number;
 }
 
 // Ceremonial / low-substance leader content (anma, taziye, kutlama…) must not
@@ -121,9 +130,14 @@ function scoreEvent(e: EventRow, srcs: EventSourceJoined[]): number {
     .reduce((a, b) => Math.max(a, b), 0.4);
 
   const catW = CATEGORY_WEIGHT[e.category] ?? 0.5;
-  const hoursOld = (Date.now() - new Date(e.first_seen_at).getTime()) / 3600000;
+  // Freshness follows the latest DEVELOPMENT, not first sighting: when an old
+  // story gets an update (cluster merge bumps last_updated_at) it resurfaces.
+  const hoursOld = (Date.now() - new Date(e.last_updated_at).getTime()) / 3600000;
   const recency = Math.exp(-Math.max(hoursOld, 0) / 36);
-  const multi = 1 + 0.6 * Math.log(1 + distinctSources.size);
+  // Many outlets covering one story = it matters (Haluk Levent effect):
+  // stronger log curve + a hard kick at 3+ distinct outlets.
+  const multi =
+    (1 + 0.8 * Math.log(1 + distinctSources.size)) * (distinctSources.size >= 3 ? 1.3 : 1);
   const clash = leans.has('iktidar') && leans.has('muhalefet') ? 1.8 : 1;
 
   const text = `${e.title} ${e.summary}`.toLocaleLowerCase('tr-TR');
@@ -292,9 +306,26 @@ export async function loadTop24(): Promise<AgendaEvent[]> {
     const scored: Scored[] = ((events as EventRow[]) ?? []).map((e) => {
       const srcs = (sourcesByEvent.get(e.id) ?? []).sort((a, b) => a.ordering - b.ordering);
       const dominantSource = srcs[0]?.raw_items.sources.id ?? 'none';
-      return { event: e, sources: srcs, importance: scoreEvent(e, srcs), dominantSource };
+
+      // Bucketing: Türkiye-important → foreign-important → Türkiye-minor →
+      // foreign-minor. "Important" = hard-news signals, multi-outlet coverage
+      // (unusual events get picked up everywhere), or a fresh update.
+      const text = `${e.title} ${e.summary}`.toLocaleLowerCase('tr-TR');
+      // A Turkish party/government source on the event settles "domestic"
+      // regardless of wording.
+      const hasPrimaryTr = srcs.some((s) => s.raw_items.sources.tier.startsWith('primary'));
+      const domestic = hasPrimaryTr || TR_RX.test(text);
+      const outletCount = new Set(srcs.map((s) => s.raw_items.sources.id)).size;
+      const updatedRecently =
+        (Date.now() - new Date(e.last_updated_at).getTime()) / 3600000 <= 12;
+      const important =
+        outletCount >= 2 || (HIGH_IMPACT_RX.test(text) && updatedRecently);
+      const tier = domestic ? (important ? 0 : 2) : important ? 1 : 3;
+
+      return { event: e, sources: srcs, importance: scoreEvent(e, srcs), dominantSource, tier };
     });
-    scored.sort((a, b) => b.importance - a.importance);
+    // Tier first, importance inside the tier.
+    scored.sort((a, b) => a.tier - b.tier || b.importance - a.importance);
 
     // Fill the swipe deck (top DECK_SIZE, per-source capped for variety), then
     // append EVERYTHING else in importance order — the archive list must show

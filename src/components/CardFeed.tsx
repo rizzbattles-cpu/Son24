@@ -13,6 +13,8 @@ interface Props {
   events: AgendaEvent[];
   startIndex: number;
   onClose: () => void;
+  /** Called when the user swipes past the LAST card (deck finished). */
+  onFinished?: () => void;
 }
 
 // Height reserved for the home screen's bottom nav that stays visible under
@@ -21,7 +23,7 @@ const NAV_SPACE = 78;
 
 // Compact reader overlaid on the Home screen: home shows through, blurred,
 // above and below the card; the bottom nav stays visible (rendered above us).
-export function CardFeed({ events, startIndex, onClose }: Props) {
+export function CardFeed({ events, startIndex, onClose, onFinished }: Props) {
   const insets = useSafeAreaInsets();
   const { width: winW, height: winH } = useWindowDimensions();
   const [activeIndex, setActiveIndex] = useState(startIndex);
@@ -75,7 +77,7 @@ export function CardFeed({ events, startIndex, onClose }: Props) {
           onIndex={handleIndex}
           onLayerChange={setLayer}
           onClose={onClose}
-          onEndReached={onClose}
+          onEndReached={onFinished ?? onClose}
         />
       </View>
 

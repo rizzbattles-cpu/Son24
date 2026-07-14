@@ -1,6 +1,7 @@
 import { useCallback, useRef } from 'react';
 import {
   View,
+  Text,
   StyleSheet,
   ScrollView,
   NativeSyntheticEvent,
@@ -97,8 +98,10 @@ export function CardStack({
       const raw = Math.round(y / page);
       const idx = Math.max(0, Math.min(items.length - 1, raw));
 
-      // Swiped past the last card into the spacer → close once.
-      if (raw >= items.length && !closing.current) {
+      // Swiped past the last card into the spacer → close once. Trigger only
+      // after the spacer is ~2/3 in view so the snap animation completes and
+      // the "finished" moment reads cleanly (no mid-gesture jump-cut).
+      if (y >= (items.length - 1) * page + page * 0.65 && !closing.current) {
         closing.current = true;
         onEndReachedRef.current?.();
         return;
@@ -173,11 +176,17 @@ export function CardStack({
               </View>
             );
           })}
-          {/* Trailing spacer — landing here closes the reader */}
+          {/* Trailing spacer — landing here closes the reader. A soft
+              "finished" note shows for the moment before the close fires. */}
           <View
             {...({ dataSet: { snapstop: 'always' } } as object)}
-            style={[{ width: cardWidth, height: page }, { scrollSnapAlign: 'start' } as object]}
-          />
+            style={[
+              { width: cardWidth, height: page, alignItems: 'center', justifyContent: 'center', gap: 8 },
+              { scrollSnapAlign: 'start' } as object,
+            ]}>
+            <Text style={styles.endCheck}>✓</Text>
+            <Text style={styles.endText}>SON HABERLER OKUNDU</Text>
+          </View>
         </ScrollView>
       </View>
     </View>
@@ -195,4 +204,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  endCheck: { color: '#d9b44a', fontSize: 34, lineHeight: 38 },
+  endText: { color: '#d9b44a', fontSize: 12, letterSpacing: 3, fontFamily: 'Rubik_700Bold' },
 });
