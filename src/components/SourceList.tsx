@@ -47,8 +47,16 @@ export function SourceList({ sources, eventId }: { sources: EventSource[]; event
                 <Text style={styles.badgeText}>{GROUP_LABEL[group]}</Text>
               </View>
               <Text style={styles.author} numberOfLines={1}>{s.author}</Text>
+              <View style={{ flex: 1 }} />
+              <Text style={styles.time}>{s.timestamp}</Text>
             </View>
-            <Text style={styles.body}>“{s.quote ?? s.body}”</Text>
+            {/* Real quote → italic in quotation marks; otherwise the item's
+                headline, plain (source + time above already give context). */}
+            {s.quote ? (
+              <Text style={styles.body}>“{s.quote}”</Text>
+            ) : (
+              <Text style={styles.headline}>{s.body}</Text>
+            )}
             {s.url && (
               <Pressable
                 onPress={() => {
@@ -122,6 +130,19 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontStyle: 'italic',
     marginTop: 2,
+  },
+  headline: {
+    color: CardPalette.text,
+    fontFamily: CardFonts.sansMed,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 2,
+  },
+  time: {
+    color: CardPalette.textDim,
+    fontFamily: CardFonts.sansMed,
+    fontSize: 10,
+    marginLeft: 6,
   },
   linkWrap: { marginTop: 3, alignSelf: 'flex-start' },
   link: {

@@ -327,25 +327,41 @@ export async function loadTop24(): Promise<AgendaEvent[]> {
     }
     const picked = [...breakSourceStreaks(deck), ...restScored];
 
+    // Agency items carry a generic placeholder body ("X, ... itibarıyla ...
+    // haber yayımladı") — never show it; the headline + time say enough.
+    const isPlaceholderBody = (b: string | null) =>
+      !!b && /itibarıyla\s.*haber yayımladı/i.test(b);
+
     return picked.map<AgendaEvent>(({ event: e, sources: eSources }) => {
-      const sources: EventSource[] = eSources.map((es) => {
+      // One row per OUTLET: quoted entries win, then the newest item.
+      const ranked = [...eSources].sort((a, b) => {
+        const qa = e.source_quotes?.[String(a.raw_items.id)] ? 1 : 0;
+        const qb = e.source_quotes?.[String(b.raw_items.id)] ? 1 : 0;
+        if (qa !== qb) return qb - qa;
+        return new Date(b.raw_items.published_at).getTime() - new Date(a.raw_items.published_at).getTime();
+      });
+      const seenOutlet = new Set<string>();
+      const sources: EventSource[] = [];
+      for (const es of ranked) {
         const raw = es.raw_items;
-        // Prefer the LLM's verbatim quote from this source's own text; fall
-        // back to a concise summary of the scraped body.
+        if (seenOutlet.has(raw.sources.id)) continue;
+        seenOutlet.add(raw.sources.id);
+        // Prefer the LLM's verbatim quote; otherwise the item's own headline
+        // (never the placeholder body).
         const quote = e.source_quotes?.[String(raw.id)]?.trim() || undefined;
-        return {
+        sources.push({
           id: `db-src-${raw.id}`,
           kind: kindFor(raw.sources.tier),
           author: raw.sources.name,
           role: es.role_in_event === 'primary' ? 'Birincil Kaynak' : 'İlgili Açıklama',
           timestamp: fmtDate(raw.published_at),
-          body: quote ?? conciseSummary(raw.body ?? raw.title, 50),
+          body: quote ?? (isPlaceholderBody(raw.body) ? raw.title : conciseSummary(raw.body ?? raw.title, 50)),
           quote,
           url: raw.url ?? undefined,
           linkLabel: raw.url ? linkLabelFor(raw.sources.id) : undefined,
           lean: raw.sources.lean as EventSource['lean'],
-        };
-      });
+        });
+      }
 
       // Photo straight from the source article (og:image). If a source has no
       // photo, the card is simply text-only — no stock pool.
