@@ -49,13 +49,28 @@ function cosine(a, b) {
   return dot / (Math.sqrt(na) * Math.sqrt(nb) || 1);
 }
 
+// Title word-overlap: how much of the SHORTER title's meaningful words appear
+// in the other. Different outlets word the same story differently, but names
+// and key nouns repeat — this catches what pure cosine misses.
+function titleWords(t) {
+  return new Set(
+    String(t).toLocaleLowerCase('tr-TR').replace(/[^a-zçğıöşü0-9 ]/gi, '').split(/\s+/).filter((w) => w.length > 3)
+  );
+}
+function titleOverlap(a, b) {
+  if (a.size === 0 || b.size === 0) return 0;
+  let common = 0;
+  a.forEach((w) => { if (b.has(w)) common++; });
+  return common / Math.min(a.size, b.size);
+}
+
 async function run() {
   const cutoff = new Date(Date.now() - WINDOW_HOURS * 3600 * 1000).toISOString();
 
   const { data: rows, error } = await supabase
     .from('event_sources')
     .select(
-      'event_id, raw_item_id, raw_items!inner(source_id, embedding, published_at), events!inner(id, category, first_seen_at)'
+      'event_id, raw_item_id, raw_items!inner(source_id, embedding, published_at), events!inner(id, title, category, first_seen_at)'
     )
     .gte('raw_items.published_at', cutoff)
     .not('raw_items.embedding', 'is', null);
@@ -72,6 +87,7 @@ async function run() {
         firstSeen: new Date(r.events.first_seen_at),
         vectors: [vec],
         sourceIds: new Set([r.raw_items.source_id]),
+        words: titleWords(r.events.title),
       });
     } else {
       const e = byEvent.get(r.event_id);
@@ -111,7 +127,20 @@ async function run() {
       if (sameSourceMonoculture) continue;
       const cB = centroid(b.vectors);
       const sim = cosine(cA, cB);
-      if (sim < (crossCategory ? Math.max(THRESHOLD, 0.92) : THRESHOLD)) continue;
+      const overlap = titleOverlap(a.words, b.words);
+      // Three ways in: (1) same category + high cosine, (2) any category with
+      // near-identical cosine, (3) titles share ≥50% of key words AND the
+      // embeddings agree it's the same story (≥0.78) — this is what merges
+      // "BBC wrote it one way, Haber Global another" into one multi-source card.
+      const passSame = !crossCategory && sim >= THRESHOLD;
+      const passCross = sim >= 0.92;
+      const passTitle = overlap >= 0.5 && sim >= 0.78;
+      // Strong-but-not-conclusive cosine (0.86+) + at least one shared key
+      // title word — any category (outlets tag the same story differently).
+      // Calibrated on live near-miss pairs: catches the "Hürmüz krizi"
+      // variants, keeps Yazıcıoğlu≠Ahbap (0.875, no shared words) apart.
+      const passStrong = sim >= 0.86 && overlap >= 0.2;
+      if (!passSame && !passCross && !passTitle && !passStrong) continue;
 
       // Merge a → b. Relink event_sources, delete a, reset b's summary.
       const { error: linkErr } = await supabase
@@ -131,7 +160,8 @@ async function run() {
       mergeCount++;
       b.vectors.push(...a.vectors);
       a.sourceIds.forEach((sid) => b.sourceIds.add(sid));
-      console.log(`  ⇒ merged ${a.eventId.slice(0, 8)}… → ${b.eventId.slice(0, 8)}… (sim=${sim.toFixed(3)})`);
+      a.words.forEach((w) => b.words.add(w));
+      console.log(`  ⇒ merged ${a.eventId.slice(0, 8)}… → ${b.eventId.slice(0, 8)}… (sim=${sim.toFixed(3)}, overlap=${overlap.toFixed(2)})`);
       break;
     }
   }
