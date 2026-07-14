@@ -46,7 +46,7 @@ export function SourceList({ sources, eventId }: { sources: EventSource[]; event
               <View style={[styles.badge, leanBg(group)]}>
                 <Text style={styles.badgeText}>{GROUP_LABEL[group]}</Text>
               </View>
-              <Text style={styles.author} numberOfLines={1}>{s.author}</Text>
+              <Text style={styles.author}>{s.author}</Text>
               <View style={{ flex: 1 }} />
               <Text style={styles.time}>{s.timestamp}</Text>
             </View>
@@ -104,7 +104,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.two,
   },
   item: { marginBottom: 2 },
-  authorRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 3 },
+  authorRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginBottom: 3 },
   badge: {
     borderRadius: 20,
     paddingHorizontal: 7,

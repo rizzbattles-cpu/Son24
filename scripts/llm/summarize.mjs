@@ -86,8 +86,9 @@ HİKAYE (story) — çok önemli:
 - how_we_got_here: 2-3 dolu cümle; olayın kökenini ve bugüne nasıl geldiğini YORUMSUZ açıkla.
 
 ALINTILAR (source_quotes) — yeni:
-- HER kaynak için, o kaynağın metninden BİREBİR (kelimesi kelimesine) kısa ve çarpıcı BİR cümle seç: kaynağın kendi ağzından en önemli iddiası/sözü. En fazla 140 karakter.
+- HER kaynak için, o kaynağın metninden BİREBİR (kelimesi kelimesine) kısa ve çarpıcı BİR cümle seç: kaynağın kendi ağzından en önemli iddiası/sözü. En fazla 160 karakter.
 - Alıntı metinde GERÇEKTEN geçmeli — asla kendi cümleni alıntı diye yazma. Uygun cümle yoksa boş string "" ver.
+- Alıntıyı ASLA yarıda kesme: cümlenin TAMAMINI al, kelime veya cümle ortasında bitirme.
 
 GİRDİ:
 Kaynak: {source_name}
@@ -438,18 +439,37 @@ async function processOne(evt, pool) {
   const storySteps = Array.isArray(out.story) ? out.story.slice(0, 5) : [];
 
   // Map "kaynak: N" quotes back to raw_item ids: { "<raw_item_id>": "..." }.
-  // Only keep quotes that genuinely appear in that source's text (verbatim
-  // guard — tolerant of surrounding whitespace/quotes).
+  // Verbatim guard + completion: the quote must genuinely appear in the
+  // source text, and if the LLM clipped it mid-sentence we extend it from the
+  // ORIGINAL text to the sentence end (never ship a half sentence).
+  const completeQuote = (src, quote) => {
+    const at = src.toLocaleLowerCase('tr-TR').indexOf(quote.toLocaleLowerCase('tr-TR'));
+    if (at === -1) return null; // not verbatim → drop
+    let end = at + quote.length;
+    if (!/[.!?…"”']/.test(src[end - 1] ?? '')) {
+      const limit = Math.min(src.length, end + 140);
+      let e = end;
+      while (e < limit && !/[.!?…]/.test(src[e])) e++;
+      if (e < limit) end = e + 1; // extend to the sentence end
+      else {
+        // no sentence end nearby — at least never cut mid-word
+        while (end > at + 15 && /\S/.test(src[end] ?? ' ') && /\S/.test(src[end - 1])) end--;
+      }
+    }
+    const outQ = src.slice(at, end).trim();
+    return outQ.length >= 15 && outQ.length <= 260 ? outQ : null;
+  };
+
   const sourceQuotes = {};
   if (Array.isArray(out.source_quotes)) {
     for (const q of out.source_quotes) {
       const idx = Number(q?.kaynak) - 1;
       const quote = String(q?.alinti ?? '').trim().replace(/^["“”']+|["“”']+$/g, '');
       if (!Number.isInteger(idx) || idx < 0 || idx >= perSource.length) continue;
-      if (quote.length < 15 || quote.length > 160) continue;
-      const hay = `${perSource[idx].title} ${perSource[idx].body}`.toLocaleLowerCase('tr-TR');
-      if (!hay.includes(quote.toLocaleLowerCase('tr-TR'))) continue; // not verbatim → drop
-      sourceQuotes[String(perSource[idx].rawItemId)] = quote;
+      if (quote.length < 15) continue;
+      const fixed = completeQuote(`${perSource[idx].title} ${perSource[idx].body}`, quote);
+      if (!fixed) continue;
+      sourceQuotes[String(perSource[idx].rawItemId)] = fixed;
     }
   }
 
